@@ -49,7 +49,7 @@ npm run build
 npm run test:a11y
 ```
 
-The suite has 11 unit tests and 6 production-browser claim/accessibility tests. Two known-answer tests reproduce the RFC 8452 AES-128 and AES-256 empty-plaintext vectors. The suite also checks full-domain OPE monotonicity, exact hypergeometric support, ORE comparison and serialization, attack-module isolation, randomized-control uniqueness, score arithmetic, retirement behavior, edge cases, and WCAG 2.1 A/AA.
+The suite has 13 unit tests and 6 production-browser claim/accessibility tests. Two known-answer tests reproduce the RFC 8452 AES-128 and AES-256 empty-plaintext vectors. The suite also checks full-domain OPE monotonicity, exact hypergeometric support, ORE comparison and serialization, attack-module isolation, randomized-control uniqueness, score arithmetic, retirement behavior, edge cases, and WCAG 2.1 A/AA.
 
 ## Performance
 

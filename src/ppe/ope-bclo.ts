@@ -91,8 +91,4 @@ export function opeEncrypt(value: number): number {
   return map[value]
 }
 
-export function opeCompare(left: number, right: number): number {
-  return Math.sign(left - right)
-}
-
 export const OPE_DOMAIN_NOTE = 'BCLO teaching profile: 8-bit plaintext to 16-bit ciphertext with exact hypergeometric recursive range splitting seeded by HMAC-SHA-256.'
