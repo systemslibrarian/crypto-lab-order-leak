@@ -7,12 +7,13 @@ import { makeTable, sealTable, type Person } from './db/table'
 import { publicAgeValues, publicDepartmentDistribution, publicSalaryValues } from './data/public'
 import { dteEncrypt, dteTagVerifies, toHex } from './ppe/dte'
 import { opeEncrypt } from './ppe/ope-bclo'
-import { oreEncrypt } from './ppe/ore-clww'
+import { oreEncrypt, oreSetup, serializeOre } from './ppe/ore-clww'
 import { compareRecovery } from './score/compare'
 
 const app = document.querySelector<HTMLElement>('#app')!
+const oreKey = oreSetup()
 let rows = makeTable(240)
-let sealed = await sealTable(rows)
+let sealed = await sealTable(rows, oreKey)
 let revealed = false
 let recovered = new Map<number, string | number | null>()
 let mode: 'department' | 'age' | 'salary' | 'control' = 'department'
@@ -22,12 +23,12 @@ let status = 'Choose a property-preserving column, then make the database answer
 const abbreviate = (value: string | number) => String(value).length > 15 ? `${String(value).slice(0, 15)}...` : String(value)
 const selected = () => rows.slice(0, 18)
 const actual = (row: Person) => mode === 'department' ? row.department : mode === 'age' ? row.age : row.salary
-const scheme = () => ({ department: 'Deterministic AES-GCM-SIV', age: 'BCLO toy OPE', salary: 'ORE MSDB teaching profile', control: 'AES-GCM randomized control' }[mode])
+const scheme = () => ({ department: 'Deterministic AES-GCM-SIV', age: 'BCLO toy OPE', salary: 'Binary CLWW ORE', control: 'AES-GCM randomized control' }[mode])
 
 function query() {
   if (mode === 'department') status = `Equality query matched ${encryptedEquality(sealed, toHex(dteEncrypt('Finance'))).length} sealed rows; the server compared a client-generated token.`
   if (mode === 'age') status = `Range query 30-40 matched ${encryptedAgeRange(sealed, opeEncrypt(30), opeEncrypt(40)).length} sealed rows; ciphertext order answered it.`
-  if (mode === 'salary') status = `ORDER BY and salary >= 120 both work: ${encryptedSalarySort(sealed).length} ordered, ${encryptedSalaryAtLeast(sealed, oreEncrypt(120)).length} matched.`
+  if (mode === 'salary') status = `ORDER BY and salary >= 120 both work: ${encryptedSalarySort(sealed).length} ordered, ${encryptedSalaryAtLeast(sealed, oreEncrypt(oreKey, 120)).length} matched.`
   if (mode === 'control') status = 'Cannot sort ciphertexts or run equality queries on randomized AES-GCM. Each encryption is intentionally different.'
   render()
 }
@@ -64,14 +65,14 @@ function render() {
     ${rows.length < 30 ? '<p class="warning" role="status">SAMPLE WARNING: fewer than 30 rows makes frequency statistics unstable. Treat this result as an illustration, not evidence.</p>' : ''}
     <section class="lab-grid">
       <article class="panel dba"><div class="panel-title"><span>DBA VIEW</span><small>${scheme()} · leaky by design</small></div><p>The database sees sealed values and never needs the plaintext key to evaluate the selected relation.</p><button class="command" id="query" ${isControl ? '' : ''}>${isControl ? 'Try a query' : 'Run query on ciphertexts'}</button><output class="status neutral" role="status" aria-live="polite">${status}</output>
-      <div class="table-wrap" tabindex="0" role="region" aria-label="Sealed database rows"><table><thead><tr><th>ROW</th><th>SEALED VALUE</th><th>PROPERTY</th></tr></thead><tbody>${selected().map((row) => `<tr><td>${row.id}</td><td class="cipher">${abbreviate(mode === 'department' ? sealed[row.id - 1].department : mode === 'age' ? sealed[row.id - 1].age : mode === 'salary' ? sealed[row.id - 1].salary.prefixTags[0] : sealed[row.id - 1].control)}</td><td>${isControl ? 'none' : mode === 'department' ? '=' : 'order'}</td></tr>`).join('')}</tbody></table></div></article>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Sealed database rows"><table><thead><tr><th>ROW</th><th>SEALED VALUE</th><th>PROPERTY</th></tr></thead><tbody>${selected().map((row) => `<tr><td>${row.id}</td><td class="cipher">${abbreviate(mode === 'department' ? sealed[row.id - 1].department : mode === 'age' ? sealed[row.id - 1].age : mode === 'salary' ? serializeOre(sealed[row.id - 1].salary) : sealed[row.id - 1].control)}</td><td>${isControl ? 'none' : mode === 'department' ? '=' : 'order'}</td></tr>`).join('')}</tbody></table></div></article>
       <article class="panel attacker"><div class="panel-title"><span>ATTACKER VIEW</span><small>ciphertexts + public statistics</small></div><p>There is no key here. ${mode === 'department' ? 'Frequency matching aligns encrypted bucket sizes to a public census.' : mode === 'age' ? 'Sorting aligns a dense ordered column to sorted public values.' : mode === 'salary' ? 'Pairwise MSDB leakage reconstructs the ORE comparison tree.' : 'Randomized AES-GCM provides no comparable signal.'}</p>
       <div class="histogram" role="group" aria-label="Public distribution">${publicBars}</div><button class="command alarm" id="recover">Run recovery</button>
       <div class="table-wrap" tabindex="0" role="region" aria-label="Recovered attacker rows"><table><thead><tr><th>ROW</th><th>RECOVERED</th><th>VERDICT</th></tr></thead><tbody>${selected().map((row) => { const guess = recovered.get(row.id); const verdict = !revealed ? (guess === undefined ? 'WAITING' : guess === null ? '? AMBIGUOUS' : '! RECOVERED') : guess === actual(row) ? '! RECOVERED' : guess == null ? '? AMBIGUOUS' : '! MISMATCH'; return `<tr><td>${row.id}</td><td>${guess === undefined ? '—' : guess === null ? 'ambiguous' : guess}</td><td class="${verdict.includes('RECOVERED') ? 'alarm-text' : verdict.includes('AMBIGUOUS') ? 'amber-text' : ''}">${verdict}</td></tr>` }).join('')}</tbody></table></div>
       <div class="reveal"><button class="command secondary" id="reveal" ${recovered.size || isControl ? '' : 'disabled'}>Reveal sealed truth</button>${revealed ? `<strong class="${isControl ? 'control-ok' : 'alarm-text'}" data-score="${scorecard.matched}/${rows.length}">${isControl ? 'NOTHING RECOVERED' : `${scorecard.matched} MATCHED · ${scorecard.mismatched} MISMATCHED · ${scorecard.unresolved} AMBIGUOUS`}</strong>` : ''}</div></article>
     </section>
     <section class="evidence"><h2>Authenticated, never decrypted, and recovered</h2><p>Every deterministic AES-GCM-SIV department ciphertext in this fixture has a valid authentication tag: <strong>${sealed.every((row) => dteTagVerifies(Uint8Array.from(row.department.match(/.{1,2}/g)!.map((part) => parseInt(part, 16))))) ? 'TAGS VERIFIED' : 'TAG FAILURE'}</strong>. The query module holds no key, an equality query still succeeds, and the frequency attack recovers cells from public counts. Confidentiality here covers the value, not the equality the scheme was configured to expose.</p></section>
-    <details><summary>Method notes and limits</summary><p>The BCLO teaching profile uses exact hypergeometric recursive splitting over an 8-bit plaintext to 16-bit ciphertext domain. The ORE teaching profile uses HMAC-SHA-256 prefix tags and an opaque monotone order code to reproduce order and MSDB leakage; it is not the paper's wire format or a production CLWW implementation. The dense age attack is complete only because its synthetic public distribution exactly matches the sealed sample. Tiny samples are unstable, and a shifted auxiliary population degrades recovery.</p></details>
+    <details><summary>Method notes and limits</summary><p>The BCLO teaching profile uses exact hypergeometric recursive splitting over an 8-bit plaintext to 16-bit ciphertext domain. Binary CLWW emits eight HMAC-SHA-256-derived trits in Z_3; comparison reveals order and the first differing plaintext-bit position without a scalar order code. The concrete PRF input encoding is this lab's 8-bit profile, not a standardized wire format. Tiny samples are unstable, and a shifted auxiliary population degrades recovery.</p></details>
     <footer class="scripture-footer"><p>So whether you eat or drink or whatever you do, do it all for the glory of God. — 1 Corinthians 10:31</p></footer>`
   app.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((button) => button.addEventListener('click', () => {
     const nextMode = button.dataset.mode as typeof mode
@@ -85,7 +86,7 @@ function render() {
   app.querySelector<HTMLButtonElement>('#query')!.addEventListener('click', query)
   app.querySelector<HTMLButtonElement>('#recover')!.addEventListener('click', recover)
   app.querySelector<HTMLButtonElement>('#reveal')!.addEventListener('click', () => { revealed = true; render() })
-  app.querySelector<HTMLSelectElement>('#row-count')!.addEventListener('change', async (event) => { rows = makeTable(Number((event.target as HTMLSelectElement).value)); sealed = await sealTable(rows); recovered = new Map(); revealed = false; status = 'Dataset reshuffled. Previous recovery retired.'; render() })
+  app.querySelector<HTMLSelectElement>('#row-count')!.addEventListener('change', async (event) => { rows = makeTable(Number((event.target as HTMLSelectElement).value)); sealed = await sealTable(rows, oreKey); recovered = new Map(); revealed = false; status = 'Dataset reshuffled. Previous recovery retired.'; render() })
   app.querySelector<HTMLSelectElement>('#population')!.addEventListener('change', (event) => { auxiliaryShifted = (event.target as HTMLSelectElement).value === 'shifted'; recovered = new Map(); revealed = false; status = 'Auxiliary population changed. Previous recovery retired.'; render() })
 }
 

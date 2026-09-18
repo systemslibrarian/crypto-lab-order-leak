@@ -2,7 +2,7 @@
 
 ## What It Is
 
-Order Leak is a browser-only teaching demo of deterministic AES-GCM-SIV, an exact-hypergeometric BCLO teaching profile, and an ORE teaching profile that exposes order and most-significant-differing-bit leakage. It demonstrates that ciphertext equality and order are useful database features and also inference signals. It is not production crypto: the OPE domain is deliberately small, and the ORE profile reproduces the leakage mechanism rather than the CLWW paper's wire format.
+Order Leak is a browser-only teaching demo of deterministic AES-GCM-SIV, an exact-hypergeometric BCLO teaching profile, and binary CLWW order-revealing encryption over an 8-bit domain. It demonstrates that ciphertext equality and order are useful database features and also inference signals. It is not production crypto: the domains are deliberately small, and the concrete HMAC-SHA-256 PRF encoding is a documented lab profile rather than a standardized wire format.
 
 ## Exhibits
 
@@ -28,7 +28,7 @@ Frequency ties are labelled ambiguous rather than guessed. Sorting is complete o
 
 ## Real-World Usage
 
-Property-preserving encryption was popularized for encrypted database query systems such as [CryptDB](https://doi.org/10.1145/2043556.2043566). Deterministic encryption leaks equality; OPE and ORE leak ordering. The constructions and attacks are grounded in [RFC 8452](https://www.rfc-editor.org/rfc/rfc8452), [Boldyreva et al.](https://doi.org/10.1007/978-3-642-01001-9_13), [Chenette et al.](https://doi.org/10.1007/978-3-662-52993-5_15), [Naveed et al.](https://doi.org/10.1145/2810103.2813651), [Durak et al.](https://doi.org/10.1145/2976749.2978379), and [Grubbs et al.](https://doi.org/10.1109/SP.2017.44).
+Property-preserving encryption was popularized for encrypted database query systems such as [CryptDB](https://doi.org/10.1145/2043556.2043566). Deterministic encryption leaks equality; OPE and ORE leak ordering. The constructions and attacks are grounded in [RFC 8452](https://www.rfc-editor.org/rfc/rfc8452), [Boldyreva et al.](https://doi.org/10.1007/978-3-642-01001-9_13), [Chenette et al.](https://doi.org/10.1007/978-3-662-52993-5_24), [Naveed et al.](https://doi.org/10.1145/2810103.2813651), [Durak et al.](https://doi.org/10.1145/2976749.2978379), and [Grubbs et al.](https://doi.org/10.1109/SP.2017.44).
 
 ## How to Run Locally
 
@@ -49,7 +49,7 @@ npm run build
 npm run test:a11y
 ```
 
-The suite has 13 unit tests and 6 production-browser claim/accessibility tests. Two known-answer tests reproduce the RFC 8452 AES-128 and AES-256 empty-plaintext vectors. The suite also checks full-domain OPE monotonicity, exact hypergeometric support, ORE comparison and serialization, attack-module isolation, randomized-control uniqueness, score arithmetic, retirement behavior, edge cases, and WCAG 2.1 A/AA.
+The suite has 15 unit tests and 6 production-browser claim/accessibility tests. Two known-answer tests reproduce the RFC 8452 AES-128 and AES-256 empty-plaintext vectors. The suite also exhaustively checks all 65,536 CLWW comparisons, full-domain OPE monotonicity, exact hypergeometric support, MSDB leakage, malformed ciphertext rejection, fresh keys, attack-module isolation, randomized-control uniqueness, score arithmetic, retirement behavior, edge cases, and WCAG 2.1 A/AA.
 
 ## Performance
 

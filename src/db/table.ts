@@ -18,13 +18,13 @@ export function makeTable(size = 240): Person[] {
   }))
 }
 
-export async function sealTable(rows: Person[]): Promise<SealedRow[]> {
+export async function sealTable(rows: Person[], oreKey: Uint8Array): Promise<SealedRow[]> {
   const controlKey = await createControlKey()
   return Promise.all(rows.map(async (row) => ({
     id: row.id,
     department: toHex(dteEncrypt(row.department)),
     age: opeEncrypt(row.age),
-    salary: oreEncrypt(row.salary),
+    salary: oreEncrypt(oreKey, row.salary),
     dte: toHex(dteEncrypt(`${row.department}:${row.age}:${row.salary}`)),
     control: await randomizedEncrypt(row.department, controlKey),
   })))
