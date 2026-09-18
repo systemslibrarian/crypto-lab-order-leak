@@ -7,7 +7,7 @@ Order Leak is a browser-only teaching demo of deterministic AES-GCM-SIV, an exac
 ## Exhibits
 
 1. The DBA view runs equality, range, and sorting queries on sealed values.
-2. The attacker view receives only ciphertext observations and separately generated synthetic public data, then performs frequency matching, sorting, and MSDB-tree recovery.
+2. The attacker view receives only ciphertext observations and separately generated synthetic public data, then performs frequency matching, sorting, NKW cumulative matching, and pairwise MSDB-tree recovery.
 3. Reveal scores every recovered cell against separately held truth; the randomized AES-GCM control recovers nothing.
 4. The authentication fixture verifies every AES-GCM-SIV tag while showing that authentication does not hide equality leakage.
 5. Matching and shifted auxiliary populations show how inference quality depends on public-data fit; a 24-row option warns that tiny samples are unstable.
@@ -49,7 +49,7 @@ npm run build
 npm run test:a11y
 ```
 
-The suite has 15 unit tests and 7 production-browser claim/accessibility tests. Two known-answer tests reproduce the RFC 8452 AES-128 and AES-256 empty-plaintext vectors. The suite also exhaustively checks all 65,536 CLWW comparisons, full-domain OPE monotonicity, exact hypergeometric support, MSDB leakage, malformed ciphertext rejection, fresh keys, attack-module isolation, randomized-control uniqueness, score arithmetic, retirement behavior, edge cases, arithmetic text contrast, non-text contrast, reflow, and WCAG 2.1 A/AA across desktop and mobile states.
+The suite has 20 unit tests and 8 production-browser claim/accessibility tests. Two known-answer tests reproduce the RFC 8452 AES-128 and AES-256 empty-plaintext vectors. The suite also exhaustively checks all 65,536 CLWW comparisons, full-domain OPE monotonicity, exact hypergeometric support, grouped cumulative matching, pairwise MSDB tree reconstruction, malformed ciphertext rejection, fresh keys, attack-module isolation, randomized-control uniqueness, score arithmetic, retirement behavior, edge cases, arithmetic text contrast, non-text contrast, reflow, and WCAG 2.1 A/AA across desktop and mobile states.
 
 ## Performance
 

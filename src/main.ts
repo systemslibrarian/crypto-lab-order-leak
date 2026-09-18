@@ -1,6 +1,7 @@
 import './styles.css'
+import { cumulativeRecover } from './attack/cumulative'
 import { frequencyRecover } from './attack/frequency'
-import { recoverOreOrder } from './attack/msdb'
+import { compareOreObservations, recoverOreTree } from './attack/msdb'
 import { sortingRecover } from './attack/sorting'
 import { encryptedAgeRange, encryptedEquality, encryptedSalaryAtLeast, encryptedSalarySort } from './db/query'
 import { makeTable, sealTable, type Person } from './db/table'
@@ -37,9 +38,14 @@ function recover() {
   recovered = new Map()
   if (mode === 'department') recovered = frequencyRecover(sealed.map((row) => ({ id: row.id, ciphertext: row.department })), publicDepartmentDistribution(rows.length, auxiliaryShifted))
   if (mode === 'age') recovered = sortingRecover(sealed.map((row) => ({ id: row.id, ciphertext: row.age })), publicAgeValues(rows.length))
-  if (mode === 'salary') recovered = new Map(recoverOreOrder(sealed.map((row) => ({ id: row.id, ciphertext: row.salary }))).map(({ id, rank }) => [id, publicSalaryValues(rows.length)[rank - 1]]))
+  if (mode === 'salary') {
+    const observations = sealed.map((row) => ({ id: row.id, ciphertext: row.salary }))
+    const tree = recoverOreTree(observations)
+    recovered = cumulativeRecover(observations, publicSalaryValues(rows.length, auxiliaryShifted), compareOreObservations)
+    status = `Cumulative matching used ${tree.pairs.length.toLocaleString()} pairwise CLWW comparisons; the recovered radix tree begins at MSDB depth ${tree.tree?.kind === 'branch' ? tree.tree.depth : 'none'}. No key was imported.`
+  }
   if (mode === 'control') status = 'NOTHING RECOVERED: randomized ciphertexts carry no stable equality or order relation.'
-  else status = `Recovery ran against ciphertexts and ${auxiliaryShifted ? 'a shifted' : 'the matching synthetic'} public population only. No key was imported by the attacker module.`
+  else if (mode !== 'salary') status = `Recovery ran against ciphertexts and ${auxiliaryShifted ? 'a shifted' : 'the matching synthetic'} public population only. No key was imported by the attacker module.`
   revealed = false
   render()
 }
@@ -66,13 +72,13 @@ function render() {
     <section class="lab-grid">
       <article class="panel dba"><div class="panel-title"><span>DBA VIEW</span><small>${scheme()} · leaky by design</small></div><p>The database sees sealed values and never needs the plaintext key to evaluate the selected relation.</p><button class="command" id="query" ${isControl ? '' : ''}>${isControl ? 'Try a query' : 'Run query on ciphertexts'}</button><output class="status neutral" role="status" aria-live="polite">${status}</output>
       <div class="table-wrap" tabindex="0" role="region" aria-label="Sealed database rows"><table><thead><tr><th>ROW</th><th>SEALED VALUE</th><th>PROPERTY</th></tr></thead><tbody>${selected().map((row) => `<tr><td>${row.id}</td><td class="cipher">${abbreviate(mode === 'department' ? sealed[row.id - 1].department : mode === 'age' ? sealed[row.id - 1].age : mode === 'salary' ? serializeOre(sealed[row.id - 1].salary) : sealed[row.id - 1].control)}</td><td>${isControl ? 'none' : mode === 'department' ? '=' : 'order'}</td></tr>`).join('')}</tbody></table></div></article>
-      <article class="panel attacker"><div class="panel-title"><span>ATTACKER VIEW</span><small>ciphertexts + public statistics</small></div><p>There is no key here. ${mode === 'department' ? 'Frequency matching aligns encrypted bucket sizes to a public census.' : mode === 'age' ? 'Sorting aligns a dense ordered column to sorted public values.' : mode === 'salary' ? 'Pairwise MSDB leakage reconstructs the ORE comparison tree.' : 'Randomized AES-GCM provides no comparable signal.'}</p>
+      <article class="panel attacker"><div class="panel-title"><span>ATTACKER VIEW</span><small>ciphertexts + public statistics</small></div><p>There is no key here. ${mode === 'department' ? 'Frequency matching aligns encrypted bucket sizes to a public census.' : mode === 'age' ? 'Sorting aligns a dense ordered column to sorted public values.' : mode === 'salary' ? 'Pairwise MSDB leakage reconstructs the ORE radix tree; cumulative matching aligns its bucket boundaries to public salary statistics.' : 'Randomized AES-GCM provides no comparable signal.'}</p>
       <div class="histogram" role="group" aria-label="Public distribution">${publicBars}</div><button class="command alarm" id="recover">Run recovery</button>
       <div class="table-wrap" tabindex="0" role="region" aria-label="Recovered attacker rows"><table><thead><tr><th>ROW</th><th>RECOVERED</th><th>VERDICT</th></tr></thead><tbody>${selected().map((row) => { const guess = recovered.get(row.id); const verdict = !revealed ? (guess === undefined ? 'WAITING' : guess === null ? '? AMBIGUOUS' : '! RECOVERED') : guess === actual(row) ? '! RECOVERED' : guess == null ? '? AMBIGUOUS' : '! MISMATCH'; return `<tr><td>${row.id}</td><td>${guess === undefined ? '—' : guess === null ? 'ambiguous' : guess}</td><td class="${verdict.includes('RECOVERED') ? 'alarm-text' : verdict.includes('AMBIGUOUS') ? 'amber-text' : ''}">${verdict}</td></tr>` }).join('')}</tbody></table></div>
       <div class="reveal"><button class="command secondary" id="reveal" ${recovered.size || isControl ? '' : 'disabled'}>Reveal sealed truth</button>${revealed ? `<strong class="${isControl ? 'control-ok' : 'alarm-text'}" data-score="${scorecard.matched}/${rows.length}">${isControl ? 'NOTHING RECOVERED' : `${scorecard.matched} MATCHED · ${scorecard.mismatched} MISMATCHED · ${scorecard.unresolved} AMBIGUOUS`}</strong>` : ''}</div></article>
     </section>
     <section class="evidence"><h2>Authenticated, never decrypted, and recovered</h2><p>Every deterministic AES-GCM-SIV department ciphertext in this fixture has a valid authentication tag: <strong>${sealed.every((row) => dteTagVerifies(Uint8Array.from(row.department.match(/.{1,2}/g)!.map((part) => parseInt(part, 16))))) ? 'TAGS VERIFIED' : 'TAG FAILURE'}</strong>. The query module holds no key, an equality query still succeeds, and the frequency attack recovers cells from public counts. Confidentiality here covers the value, not the equality the scheme was configured to expose.</p></section>
-    <details><summary>Method notes and limits</summary><p>The BCLO teaching profile uses exact hypergeometric recursive splitting over an 8-bit plaintext to 16-bit ciphertext domain. Binary CLWW emits eight HMAC-SHA-256-derived trits in Z_3; comparison reveals order and the first differing plaintext-bit position without a scalar order code. The concrete PRF input encoding is this lab's 8-bit profile, not a standardized wire format. Tiny samples are unstable, and a shifted auxiliary population degrades recovery.</p></details>
+    <details><summary>Method notes and limits</summary><p>The BCLO teaching profile uses exact hypergeometric recursive splitting over an 8-bit plaintext to 16-bit ciphertext domain. Binary CLWW emits eight HMAC-SHA-256-derived trits in Z_3; all pairwise comparisons reconstruct a binary radix tree from order and first-difference depth. NKW cumulative matching then aligns encrypted bucket CDF boundaries to the auxiliary salary CDF. The concrete PRF input encoding is this lab's 8-bit profile, not a standardized wire format. Tiny samples are unstable, and a shifted auxiliary population degrades recovery.</p></details>
     <footer class="scripture-footer"><p>So whether you eat or drink or whatever you do, do it all for the glory of God. — 1 Corinthians 10:31</p></footer>`
   app.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((button) => button.addEventListener('click', () => {
     const nextMode = button.dataset.mode as typeof mode

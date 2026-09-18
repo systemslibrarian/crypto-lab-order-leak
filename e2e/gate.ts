@@ -629,7 +629,7 @@ export async function driveAllStates(page: Page, theme: string): Promise<void> {
   await expect(page.getByText('ORDER BY and salary >= 120 both work', { exact: false })).toBeVisible();
   await scanAt('salary ORE query complete');
   await page.getByRole('button', { name: 'Run recovery' }).click();
-  await expect(page.getByText('Recovery ran against ciphertexts', { exact: false })).toBeVisible();
+  await expect(page.getByText('Cumulative matching used', { exact: false })).toBeVisible();
   await scanAt('salary MSDB recovery complete');
   await page.getByRole('button', { name: 'Reveal sealed truth' }).click();
   await expect(page.locator('[data-score]')).toBeVisible();

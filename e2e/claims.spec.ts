@@ -55,3 +55,17 @@ test('authenticated deterministic ciphertexts can still be recovered', async ({ 
   await page.getByRole('button', { name: 'Reveal sealed truth' }).click()
   await expect(page.locator('[data-score]')).not.toHaveAttribute('data-score', '0/240')
 })
+
+test('pairwise MSDB tree and cumulative matching recover salary but shifted statistics degrade it', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Salary / ORE' }).click()
+  await page.getByRole('button', { name: 'Run recovery' }).click()
+  await expect(page.getByRole('status')).toContainText('28,680 pairwise CLWW comparisons')
+  await page.getByRole('button', { name: 'Reveal sealed truth' }).click()
+  await expect(page.locator('[data-score]')).toHaveAttribute('data-score', '240/240')
+
+  await page.getByLabel('Public population').selectOption('shifted')
+  await page.getByRole('button', { name: 'Run recovery' }).click()
+  await page.getByRole('button', { name: 'Reveal sealed truth' }).click()
+  await expect(page.locator('[data-score]')).not.toHaveAttribute('data-score', '240/240')
+})

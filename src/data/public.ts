@@ -17,6 +17,12 @@ export function publicAgeValues(size: number): number[] {
   return Array.from({ length: size }, (_, index) => 20 + (index % 46)).sort((left, right) => left - right)
 }
 
-export function publicSalaryValues(size: number): number[] {
-  return Array.from({ length: size }, (_, index) => salaryBands[(index * 5) % salaryBands.length]).sort((left, right) => left - right)
+export function publicSalaryValues(size: number, shifted = false): number[] {
+  const values = Array.from({ length: size }, (_, index) => salaryBands[(index * 5) % salaryBands.length]).sort((left, right) => left - right)
+  if (shifted) {
+    const transfer = Math.min(Math.floor(size * 0.08), values.filter((value) => value === salaryBands[0]).length - 1)
+    values.splice(0, transfer)
+    values.push(...Array.from({ length: transfer }, () => salaryBands.at(-1)!))
+  }
+  return values
 }
