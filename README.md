@@ -48,7 +48,7 @@ npm run build
 npm run test:a11y
 ```
 
-The suite currently has 5 unit tests and 3 production-browser claim/accessibility tests. AES-GCM-SIV uses the audited `@noble/ciphers` implementation; OPE monotonicity and ORE comparison correctness are tested over the teaching domain.
+The suite currently has 5 unit tests and 4 production-browser claim/accessibility tests. AES-GCM-SIV uses the audited `@noble/ciphers` implementation; OPE monotonicity and ORE comparison correctness are tested over the teaching domain.
 
 ## Performance
 
