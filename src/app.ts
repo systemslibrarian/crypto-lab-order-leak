@@ -28,6 +28,30 @@ const columnName = () => ({ department: 'Department', age: 'Age', salary: 'Salar
 const schemeName = () => ({ dte: 'Deterministic AES-GCM-SIV', ope: 'BCLO toy OPE', ore: 'Binary CLWW ORE', control: 'AES-GCM randomized control' }[selectedScheme])
 const queryBounds = () => column === 'department' ? [1, 2] : column === 'age' ? [30, 40] : [73, 149]
 const equalityTarget = () => column === 'department' ? 'Finance' : column === 'age' ? 40 : 101
+const lesson = () => ({
+  dte: {
+    feature: 'Find rows equal to a search value',
+    leak: 'Equal values always produce equal ciphertexts',
+    attack: 'Count repeated ciphertexts and match those counts to public statistics',
+  },
+  ope: {
+    feature: 'Run ranges and sort encrypted rows',
+    leak: 'Ciphertexts appear in the same order as plaintexts',
+    attack: column === 'salary'
+      ? 'Ranks leak, but sparse gaps stay unknown; the sorting attack is incomplete'
+      : 'Match ciphertext ranks to a dense public list and recover each value',
+  },
+  ore: {
+    feature: 'Compare and sort encrypted rows',
+    leak: 'Comparisons reveal order and the first differing bit',
+    attack: 'Rebuild an order tree, then align its boundaries to public statistics',
+  },
+  control: {
+    feature: 'No equality, range, or sort query',
+    leak: 'Repeated values have unrelated ciphertexts',
+    attack: 'No stable pattern remains to match; recovery stays at zero',
+  },
+}[selectedScheme])
 
 function publicValues(): (string | number)[] {
   if (column === 'department') {
@@ -118,6 +142,7 @@ function render() {
   const publicBars = Object.entries(distribution).slice(0, 12).map(([name, count]) => `<div class="bar-row"><span>${name}</span><i style="width:${(count / rows.length) * 100}%"></i><b>${count}</b></div>`).join('')
   const scorecard = score()
   const isControl = selectedScheme === 'control'
+  const currentLesson = lesson()
   const attackDescription = selectedScheme === 'dte'
     ? 'Frequency matching aligns deterministic buckets to public counts.'
     : selectedScheme === 'ope'
@@ -131,13 +156,14 @@ function render() {
       <div class="cl-hero-main"><h1 class="cl-hero-title">Order Leak</h1><p class="cl-hero-sub">Property-preserving encryption · OPE · ORE</p><p class="cl-hero-desc">Sort an encrypted column, run WHERE on it, then hand the same ciphertexts to an attacker with a census table and watch the column return without the key.</p></div>
       <aside class="cl-hero-why" aria-label="Why it matters"><span class="cl-hero-why-label">WHY IT MATTERS</span><p class="cl-hero-why-text">Encryption at rest is not the end of the conversation. Schemes that preserve equality or order for a database also publish the shape an inference attack needs.</p></aside>
     </header>
-    <section class="intro"><p><strong>What is this?</strong> Every department, age, and salary cell is sealed under DTE, OPE, ORE, and a randomized control. Choose any matrix position and inspect what remains queryable.</p><p><strong>What this is not:</strong> not production crypto, searchable encryption, format-preserving encryption, mutable OPE, Lewi-Wu left/right ORE, or a vendor evaluation.</p></section>
+    <section class="intro"><p><strong>The lesson:</strong> queryable encryption leaves a pattern visible on purpose. The database uses that pattern to answer a query; an attacker can use the same pattern, plus public statistics, to infer the hidden values without the key.</p><p><strong>Try the contrast:</strong> DTE leaks equality, OPE leaks order, ORE leaks order plus bit structure, and randomized AES-GCM leaks neither stable relation.</p></section>
     <section class="steps" aria-label="Lab steps"><span>1. Pick a column</span><span>2. Pick a scheme</span><span>3. Query</span><span>4. Recover and reveal</span></section>
-    <section class="controls" aria-label="Experiment controls"><div class="matrix-controls"><div class="segmented" role="group" aria-label="Database column">
+    <section class="controls" aria-label="Experiment controls"><div class="matrix-controls"><div><span class="control-label">1 · DATA TO PROTECT</span><div class="segmented" role="group" aria-label="Database column">
       ${(['department', 'age', 'salary'] as const).map((choice) => `<button class="${column === choice ? 'active' : ''}" data-column="${choice}" aria-pressed="${column === choice}">${choice === 'department' ? 'Department' : choice === 'age' ? 'Age' : 'Salary'}</button>`).join('')}
-    </div><div class="segmented" role="group" aria-label="Encryption scheme">
-      ${(['dte', 'ope', 'ore', 'control'] as const).map((choice) => `<button class="${selectedScheme === choice ? 'active' : ''}" data-scheme="${choice}" aria-pressed="${selectedScheme === choice}">${choice === 'dte' ? 'DTE' : choice === 'ope' ? 'OPE' : choice === 'ore' ? 'ORE' : 'Randomized control'}</button>`).join('')}
-    </div></div><div class="control-pair"><label>Rows <select id="row-count"><option value="24" ${rows.length === 24 ? 'selected' : ''}>24 (tiny)</option><option value="240" ${rows.length === 240 ? 'selected' : ''}>240</option><option value="500" ${rows.length === 500 ? 'selected' : ''}>500</option><option value="1000" ${rows.length === 1000 ? 'selected' : ''}>1,000</option></select></label><label>Public population <select id="population"><option value="matching" ${auxiliaryPopulation === 'matching' ? 'selected' : ''}>Matching synthetic</option><option value="shifted" ${auxiliaryPopulation === 'shifted' ? 'selected' : ''}>Shifted population</option><option value="mismatch" ${auxiliaryPopulation === 'mismatch' ? 'selected' : ''}>Mismatched support</option></select></label></div></section>
+    </div></div><div><span class="control-label">2 · ENCRYPTION CHOICE</span><div class="segmented" role="group" aria-label="Encryption scheme">
+      ${(['dte', 'ope', 'ore', 'control'] as const).map((choice) => `<button class="${selectedScheme === choice ? 'active' : ''}" data-scheme="${choice}" aria-pressed="${selectedScheme === choice}">${choice === 'dte' ? 'Deterministic (DTE)' : choice === 'ope' ? 'Order-preserving (OPE)' : choice === 'ore' ? 'Order-revealing (ORE)' : 'Randomized control'}</button>`).join('')}
+    </div></div></div><div class="control-pair"><label>Rows <select id="row-count"><option value="24" ${rows.length === 24 ? 'selected' : ''}>24 (tiny)</option><option value="240" ${rows.length === 240 ? 'selected' : ''}>240</option><option value="500" ${rows.length === 500 ? 'selected' : ''}>500</option><option value="1000" ${rows.length === 1000 ? 'selected' : ''}>1,000</option></select></label><label>Public population <select id="population"><option value="matching" ${auxiliaryPopulation === 'matching' ? 'selected' : ''}>Matching synthetic</option><option value="shifted" ${auxiliaryPopulation === 'shifted' ? 'selected' : ''}>Shifted population</option><option value="mismatch" ${auxiliaryPopulation === 'mismatch' ? 'selected' : ''}>Mismatched support</option></select></label></div></section>
+    <section class="leakage-ledger" aria-labelledby="tradeoff-title"><div class="ledger-heading"><span>SELECTED EXPERIMENT</span><h2 id="tradeoff-title">${columnName()} under ${schemeName()}</h2></div><div class="ledger-facts"><div><b>DATABASE GAINS</b><p>${currentLesson.feature}</p></div><div><b>PATTERN LEFT VISIBLE</b><p>${currentLesson.leak}</p></div><div class="${isControl ? 'safe-fact' : 'danger-fact'}"><b>ATTACKER CAN</b><p>${currentLesson.attack}</p></div></div></section>
     ${rows.length < 30 ? '<p class="warning" role="status">SAMPLE WARNING: fewer than 30 rows makes frequency statistics unstable. Treat this result as an illustration, not evidence.</p>' : ''}
     <section class="lab-grid">
       <article class="panel dba"><div class="panel-title"><span>DBA VIEW</span><small>${columnName()} · ${schemeName()} · ${isControl ? 'control' : 'leaky by design'}</small></div><p>The database sees sealed values and evaluates only the selected ciphertext relation.</p><button class="command" id="query">${isControl ? 'Try a query' : 'Run query on ciphertexts'}</button><output class="status neutral" role="status" aria-live="polite">${status}</output>

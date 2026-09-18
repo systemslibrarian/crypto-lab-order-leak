@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test'
 test('OPE sorting recovers dense age but fails explicitly on sparse salary', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Age', exact: true }).click()
-  await page.getByRole('button', { name: 'OPE', exact: true }).click()
+  await page.getByRole('button', { name: 'Order-preserving (OPE)', exact: true }).click()
   await page.getByRole('button', { name: 'Run recovery' }).click()
   await page.getByRole('button', { name: 'Reveal sealed truth' }).click()
   const verdict = await page.locator('[data-score]').textContent()
@@ -65,7 +65,7 @@ test('authenticated deterministic ciphertexts can still be recovered', async ({ 
 test('pairwise MSDB tree and cumulative matching recover salary but shifted statistics degrade it', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Salary', exact: true }).click()
-  await page.getByRole('button', { name: 'ORE', exact: true }).click()
+  await page.getByRole('button', { name: 'Order-revealing (ORE)', exact: true }).click()
   await page.getByRole('button', { name: 'Run recovery' }).click()
   await expect(page.getByRole('status')).toContainText('28,680 pairwise CLWW comparisons')
   await page.getByRole('button', { name: 'Reveal sealed truth' }).click()
@@ -80,7 +80,7 @@ test('pairwise MSDB tree and cumulative matching recover salary but shifted stat
 test('mismatched auxiliary support is named and recovery fails closed', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Salary', exact: true }).click()
-  await page.getByRole('button', { name: 'ORE', exact: true }).click()
+  await page.getByRole('button', { name: 'Order-revealing (ORE)', exact: true }).click()
   await page.getByLabel('Public population').selectOption('mismatch')
   await page.getByRole('button', { name: 'Run recovery' }).click()
   await expect(page.getByRole('status')).toContainText('RECOVERY REJECTED: Auxiliary support mismatch')
@@ -91,13 +91,29 @@ test('every column is interactive under DTE, OPE, ORE, and randomized control', 
   await page.goto('/')
   for (const column of ['Department', 'Age', 'Salary']) {
     await page.getByRole('button', { name: column, exact: true }).click()
-    for (const scheme of ['DTE', 'OPE', 'ORE', 'Randomized control']) {
-      await page.getByRole('button', { name: scheme, exact: true }).click()
-      await page.getByRole('button', { name: scheme, exact: true }).evaluate((button) => {
+    for (const scheme of [
+      { name: 'Deterministic (DTE)', status: 'Equality query' },
+      { name: 'Order-preserving (OPE)', status: 'Range query' },
+      { name: 'Order-revealing (ORE)', status: 'Range query' },
+      { name: 'Randomized control', status: 'Cannot sort ciphertexts' },
+    ]) {
+      await page.getByRole('button', { name: scheme.name, exact: true }).click()
+      await page.getByRole('button', { name: scheme.name, exact: true }).evaluate((button) => {
         if (button.getAttribute('aria-pressed') !== 'true') throw new Error('Matrix position was not selected.')
       })
-      await page.getByRole('button', { name: scheme === 'Randomized control' ? 'Try a query' : 'Run query on ciphertexts' }).click()
-      await expect(page.getByRole('status')).toContainText(scheme === 'Randomized control' ? 'Cannot sort ciphertexts' : scheme === 'DTE' ? 'Equality query' : 'Range query')
+      await page.getByRole('button', { name: scheme.name === 'Randomized control' ? 'Try a query' : 'Run query on ciphertexts' }).click()
+      await expect(page.getByRole('status')).toContainText(scheme.status)
     }
   }
+})
+
+test('the live tradeoff explains that the database feature is also the attacker signal', async ({ page }) => {
+  await page.goto('/')
+  const ledger = page.getByRole('region', { name: 'Department under Deterministic AES-GCM-SIV' })
+  await expect(ledger).toContainText('Find rows equal to a search value')
+  await expect(ledger).toContainText('Equal values always produce equal ciphertexts')
+  await expect(ledger).toContainText('Count repeated ciphertexts')
+
+  await page.getByRole('button', { name: 'Randomized control', exact: true }).click()
+  await expect(page.getByRole('region', { name: 'Department under AES-GCM randomized control' })).toContainText('recovery stays at zero')
 })

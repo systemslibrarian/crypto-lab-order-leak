@@ -566,7 +566,7 @@ export async function boot(page: Page, theme: 'dark'): Promise<void> {
     'aria-pressed',
     'true'
   );
-  await expect(page.getByRole('button', { name: 'DTE', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'Deterministic (DTE)', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#row-count')).toHaveValue('240');
   await expect(page.locator('#population')).toHaveValue('matching');
   await expect(page.getByRole('button', { name: 'Reveal sealed truth' })).toBeDisabled();
@@ -618,9 +618,9 @@ export async function driveAllStates(page: Page, theme: string): Promise<void> {
   await expect(page.locator('#population')).toHaveValue('matching');
 
   await page.getByRole('button', { name: 'Age', exact: true }).click();
-  await page.getByRole('button', { name: 'OPE', exact: true }).click();
+  await page.getByRole('button', { name: 'Order-preserving (OPE)', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Age', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByRole('button', { name: 'OPE', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'Order-preserving (OPE)', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: 'Run query on ciphertexts' }).click();
   await expect(page.getByText('Range query 30-40 matched', { exact: false })).toBeVisible();
   await scanAt('age range query complete');
@@ -638,8 +638,8 @@ export async function driveAllStates(page: Page, theme: string): Promise<void> {
   await expect(page.getByRole('button', { name: 'Reveal sealed truth' })).toBeDisabled();
   await scanAt('salary OPE sorting attack explicitly incomplete');
 
-  await page.getByRole('button', { name: 'ORE', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'ORE', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: 'Order-revealing (ORE)', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Order-revealing (ORE)', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: 'Run query on ciphertexts' }).click();
   await expect(page.getByText('Range query 73-149 matched', { exact: false })).toBeVisible();
   await scanAt('salary ORE query complete');
