@@ -6,8 +6,12 @@ const decoder = new TextDecoder()
 export const DTE_KEY = new Uint8Array(32).fill(0x42)
 export const DTE_NONCE = new Uint8Array(12).fill(0x11)
 
+export function aesGcmSivEncrypt(key: Uint8Array, nonce: Uint8Array, plaintext: Uint8Array): Uint8Array {
+  return gcmsiv(key, nonce).encrypt(plaintext)
+}
+
 export function dteEncrypt(value: string, key = DTE_KEY): Uint8Array {
-  return gcmsiv(key, DTE_NONCE).encrypt(encoder.encode(value))
+  return aesGcmSivEncrypt(key, DTE_NONCE, encoder.encode(value))
 }
 
 export function dteDecrypt(ciphertext: Uint8Array, key = DTE_KEY): string {

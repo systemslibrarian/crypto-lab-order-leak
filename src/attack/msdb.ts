@@ -1,7 +1,11 @@
-import type { OreCiphertext } from '../ppe/ore-clww'
-import { oreCompare, msdbDepth } from '../ppe/ore-clww'
+export type OreObservation = { orderCode: number; prefixTags: string[] }
 
-export function recoverOreOrder(observations: { id: number; ciphertext: OreCiphertext }[]) {
-  const ordered = [...observations].sort((left, right) => oreCompare(left.ciphertext, right.ciphertext))
+function msdbDepth(left: OreObservation, right: OreObservation): number | null {
+  const match = left.prefixTags.findIndex((prefix, index) => prefix !== right.prefixTags[index])
+  return match === -1 ? null : match
+}
+
+export function recoverOreOrder(observations: { id: number; ciphertext: OreObservation }[]) {
+  const ordered = [...observations].sort((left, right) => left.ciphertext.orderCode - right.ciphertext.orderCode)
   return ordered.map((row, index) => ({ id: row.id, rank: index + 1, split: index === 0 ? null : msdbDepth(ordered[index - 1].ciphertext, row.ciphertext) }))
 }

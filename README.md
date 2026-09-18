@@ -2,14 +2,15 @@
 
 ## What It Is
 
-Order Leak is a browser-only teaching demo of deterministic AES-GCM-SIV, a deliberately small BCLO-style order-preserving encryption construction, and CLWW-style order-revealing ciphertext comparisons. It demonstrates that ciphertext equality and order are useful database features and also inference signals. It is not production crypto: the OPE and ORE implementations are inspectable toy-domain teaching constructions, not a deployment library.
+Order Leak is a browser-only teaching demo of deterministic AES-GCM-SIV, an exact-hypergeometric BCLO teaching profile, and an ORE teaching profile that exposes order and most-significant-differing-bit leakage. It demonstrates that ciphertext equality and order are useful database features and also inference signals. It is not production crypto: the OPE domain is deliberately small, and the ORE profile reproduces the leakage mechanism rather than the CLWW paper's wire format.
 
 ## Exhibits
 
 1. The DBA view runs equality, range, and sorting queries on sealed values.
-2. The attacker view receives only ciphertexts and a public distribution, then performs frequency matching, sorting, and MSDB-tree recovery.
+2. The attacker view receives only ciphertext observations and separately generated synthetic public data, then performs frequency matching, sorting, and MSDB-tree recovery.
 3. Reveal scores every recovered cell against separately held truth; the randomized AES-GCM control recovers nothing.
 4. The authentication fixture verifies every AES-GCM-SIV tag while showing that authentication does not hide equality leakage.
+5. Matching and shifted auxiliary populations show how inference quality depends on public-data fit; a 24-row option warns that tiny samples are unstable.
 
 ## When to Use It
 
@@ -23,11 +24,11 @@ Choose a column, run a ciphertext query, recover it from public statistics, and 
 
 ## What Can Go Wrong
 
-Frequency ties are labelled ambiguous rather than guessed. Sorting is complete only for a dense column whose auxiliary distribution matches. Values outside the 8-bit OPE teaching domain are rejected. A randomized AES-GCM control intentionally cannot support equality or order queries.
+Frequency ties are labelled ambiguous rather than guessed. Sorting is complete only for a dense column whose auxiliary distribution matches. Values outside the 8-bit OPE teaching domain are rejected. The randomized AES-GCM control uses a fresh 96-bit nonce for every row and intentionally cannot support equality or order queries.
 
 ## Real-World Usage
 
-Property-preserving encryption was popularized for encrypted database query systems such as CryptDB. Deterministic encryption leaks equality; OPE and ORE leak ordering. The attacks illustrated here follow Naveed, Kamara, and Wright's inference-attack model and later MSDB leakage work by Durak, DuBuisson, Cash, and Grubbs et al.
+Property-preserving encryption was popularized for encrypted database query systems such as [CryptDB](https://doi.org/10.1145/2043556.2043566). Deterministic encryption leaks equality; OPE and ORE leak ordering. The constructions and attacks are grounded in [RFC 8452](https://www.rfc-editor.org/rfc/rfc8452), [Boldyreva et al.](https://doi.org/10.1007/978-3-642-01001-9_13), [Chenette et al.](https://doi.org/10.1007/978-3-662-52993-5_15), [Naveed et al.](https://doi.org/10.1145/2810103.2813651), [Durak et al.](https://doi.org/10.1145/2976749.2978379), and [Grubbs et al.](https://doi.org/10.1109/SP.2017.44).
 
 ## How to Run Locally
 
@@ -38,7 +39,7 @@ npm run dev
 
 ## Related Demos
 
-[Crypto Lab](https://crypto-lab.systemslibrarian.dev/) includes related work on searchable encryption and format-preserving encryption.
+[Crypto Lab](https://crypto-lab.systemslibrarian.dev/) includes related work on searchable encryption and format-preserving encryption. Those are explicit non-goals here: searchable encryption adds token and access-pattern questions, while format-preserving encryption is deterministic but does not preserve order.
 
 ## Build & Verify
 
@@ -48,14 +49,14 @@ npm run build
 npm run test:a11y
 ```
 
-The suite currently has 5 unit tests and 4 production-browser claim/accessibility tests. AES-GCM-SIV uses the audited `@noble/ciphers` implementation; OPE monotonicity and ORE comparison correctness are tested over the teaching domain.
+The suite has 11 unit tests and 6 production-browser claim/accessibility tests. Two known-answer tests reproduce the RFC 8452 AES-128 and AES-256 empty-plaintext vectors. The suite also checks full-domain OPE monotonicity, exact hypergeometric support, ORE comparison and serialization, attack-module isolation, randomized-control uniqueness, score arithmetic, retirement behavior, edge cases, and WCAG 2.1 A/AA.
 
 ## Performance
 
-The demo intentionally uses a small table (240-1,000 rows) so each attack remains inspectable in a browser.
+The main demo uses 240-1,000 rows so each attack remains inspectable in a browser. The 24-row edge case is deliberately below the supported statistical range and displays a warning.
 
 ---
 
 *One of the browser demos in the [Crypto Lab](https://crypto-lab.systemslibrarian.dev/) suite.*
 
-*"So whether you eat or drink or whatever you do, do it all for the glory of God." — 1 Corinthians 10:31*# crypto-lab-order-leak
+*"So whether you eat or drink or whatever you do, do it all for the glory of God." — 1 Corinthians 10:31*
