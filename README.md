@@ -20,7 +20,7 @@ Use this to learn why encrypted database query features need an explicit leakage
 
 https://systemslibrarian.github.io/crypto-lab-order-leak/
 
-Choose a column, run a ciphertext query, recover it from public statistics, and reveal the cell-by-cell score.
+Choose any of the three columns, switch independently among DTE, OPE, ORE, and randomized AES-GCM, run a ciphertext query, recover it from public statistics, and reveal the cell-by-cell score. Every row stores the full three-column by four-scheme matrix; the controls select a real ciphertext, not a simulated view.
 
 ## What Can Go Wrong
 
@@ -49,7 +49,7 @@ npm run build
 npm run test:a11y
 ```
 
-The suite has 20 unit tests and 9 production-browser claim/accessibility tests. Two known-answer tests reproduce the RFC 8452 AES-128 and AES-256 empty-plaintext vectors. The suite also exhaustively checks all 65,536 CLWW comparisons, full-domain OPE monotonicity, exact hypergeometric support, grouped cumulative matching, pairwise MSDB tree reconstruction, malformed ciphertext rejection, fresh keys, attack-module isolation, randomized-control uniqueness, score arithmetic, retirement behavior, support-mismatch rejection, edge cases, arithmetic text contrast, non-text contrast, reflow, and WCAG 2.1 A/AA across desktop and mobile states.
+The suite has 23 unit tests and 10 production-browser claim/accessibility tests. Two known-answer tests reproduce the RFC 8452 AES-128 and AES-256 empty-plaintext vectors. The suite also checks the full sealed matrix and ciphertext-only query API, exhaustively checks all 65,536 CLWW comparisons, full-domain OPE monotonicity, exact hypergeometric support, dense-versus-sparse sorting behavior, grouped cumulative matching, pairwise MSDB tree reconstruction, malformed ciphertext rejection, fresh keys, attack-module isolation, randomized-control uniqueness, score arithmetic, retirement behavior, support-mismatch rejection, edge cases, arithmetic text contrast, non-text contrast, reflow, and WCAG 2.1 A/AA across desktop and mobile states.
 
 ## Performance
 

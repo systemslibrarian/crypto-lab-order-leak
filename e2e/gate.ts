@@ -562,16 +562,17 @@ export async function boot(page: Page, theme: 'dark'): Promise<void> {
     page.locator('#theme-toggle, #themeToggle, .theme-toggle, .theme-toggle-btn, [data-theme-toggle]')
   ).toHaveCount(0);
 
-  await expect(page.getByRole('button', { name: 'Department / equality' })).toHaveAttribute(
+  await expect(page.getByRole('button', { name: 'Department', exact: true })).toHaveAttribute(
     'aria-pressed',
     'true'
   );
+  await expect(page.getByRole('button', { name: 'DTE', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#row-count')).toHaveValue('240');
   await expect(page.locator('#population')).toHaveValue('matching');
   await expect(page.getByRole('button', { name: 'Reveal sealed truth' })).toBeDisabled();
   await expect(page.locator('.table-wrap')).toHaveCount(2);
   await expect(page.locator('details[open]')).toHaveCount(0);
-  await expect(page.getByText('Choose a property-preserving column', { exact: false })).toBeVisible();
+  await expect(page.getByText('Choose a column and scheme', { exact: false })).toBeVisible();
 
   await settle(page);
   await expectNotBlank(page, `${theme} first paint`);
@@ -580,8 +581,8 @@ export async function boot(page: Page, theme: 'dark'): Promise<void> {
 /**
  * Exercise every Order Leak rendering through reader-reachable controls.
  * Every action and every assertion starts from a fresh locator because render()
- * replaces all descendants of #app after mode, query, recovery, reveal, and
- * select changes.
+ * replaces all descendants of #app after column, scheme, query, recovery,
+ * reveal, and select changes.
  */
 export async function driveAllStates(page: Page, theme: string): Promise<void> {
   const scanAt = (state: string): Promise<void> => scan(page, `${theme} / ${state}`);
@@ -594,10 +595,10 @@ export async function driveAllStates(page: Page, theme: string): Promise<void> {
   await scanAt('skip link focused and visible');
 
   await page.getByRole('button', { name: 'Run query on ciphertexts' }).click();
-  await expect(page.getByText('Equality query matched', { exact: false })).toBeVisible();
+  await expect(page.getByText('Equality query for Finance matched', { exact: false })).toBeVisible();
   await scanAt('department equality query complete');
   await page.getByRole('button', { name: 'Run recovery' }).click();
-  await expect(page.getByText('Recovery ran against ciphertexts', { exact: false })).toBeVisible();
+  await expect(page.getByText('Frequency matching aligned', { exact: false })).toBeVisible();
   await scanAt('department frequency recovery complete');
   await page.getByRole('button', { name: 'Reveal sealed truth' }).click();
   await expect(page.locator('[data-score]')).toBeVisible();
@@ -616,22 +617,31 @@ export async function driveAllStates(page: Page, theme: string): Promise<void> {
   await page.locator('#population').selectOption('matching');
   await expect(page.locator('#population')).toHaveValue('matching');
 
-  await page.getByRole('button', { name: 'Age / order' }).click();
-  await expect(page.getByRole('button', { name: 'Age / order' })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: 'Age', exact: true }).click();
+  await page.getByRole('button', { name: 'OPE', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Age', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'OPE', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: 'Run query on ciphertexts' }).click();
   await expect(page.getByText('Range query 30-40 matched', { exact: false })).toBeVisible();
   await scanAt('age range query complete');
   await page.getByRole('button', { name: 'Run recovery' }).click();
-  await expect(page.getByText('Recovery ran against ciphertexts', { exact: false })).toBeVisible();
+  await expect(page.getByText('Sorting attack aligned the dense', { exact: false })).toBeVisible();
   await scanAt('age sorting recovery complete');
   await page.getByRole('button', { name: 'Reveal sealed truth' }).click();
   await expect(page.locator('[data-score]')).toBeVisible();
   await scanAt('age truth revealed and scored');
 
-  await page.getByRole('button', { name: 'Salary / ORE' }).click();
-  await expect(page.getByRole('button', { name: 'Salary / ORE' })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: 'Salary', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Salary', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: 'Run recovery' }).click();
+  await expect(page.getByRole('status')).toContainText('Sorting attack incomplete: sparse support');
+  await expect(page.getByRole('button', { name: 'Reveal sealed truth' })).toBeDisabled();
+  await scanAt('salary OPE sorting attack explicitly incomplete');
+
+  await page.getByRole('button', { name: 'ORE', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'ORE', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: 'Run query on ciphertexts' }).click();
-  await expect(page.getByText('ORDER BY and salary >= 120 both work', { exact: false })).toBeVisible();
+  await expect(page.getByText('Range query 73-149 matched', { exact: false })).toBeVisible();
   await scanAt('salary ORE query complete');
   await page.getByRole('button', { name: 'Run recovery' }).click();
   await expect(page.getByText('Cumulative matching used', { exact: false })).toBeVisible();
@@ -665,8 +675,8 @@ export async function driveAllStates(page: Page, theme: string): Promise<void> {
   await expect(page.locator('details[open]')).toHaveCount(1);
   await scanAt('method notes and limits open');
 
-  await page.getByRole('button', { name: 'Department / equality' }).hover();
-  await scanAt('segmented mode button hovered');
+  await page.getByRole('button', { name: 'Department', exact: true }).hover();
+  await scanAt('segmented column button hovered');
   await page.getByRole('button', { name: 'Try a query' }).hover();
   await scanAt('command button hovered');
   await page.locator('.cl-topbar a').first().hover();

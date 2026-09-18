@@ -1,20 +1,26 @@
 import { expect, test } from '@playwright/test'
 
-test('dense OPE sorting recovers every age and reports the computed total', async ({ page }) => {
+test('OPE sorting recovers dense age but fails explicitly on sparse salary', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Age / order' }).click()
+  await page.getByRole('button', { name: 'Age', exact: true }).click()
+  await page.getByRole('button', { name: 'OPE', exact: true }).click()
   await page.getByRole('button', { name: 'Run recovery' }).click()
   await page.getByRole('button', { name: 'Reveal sealed truth' }).click()
   const verdict = await page.locator('[data-score]').textContent()
   const counts = verdict!.match(/(\d+) MATCHED · (\d+) MISMATCHED · (\d+) AMBIGUOUS/)!.slice(1).map(Number)
   expect(counts.reduce((sum, count) => sum + count, 0)).toBe(240)
   expect(counts).toEqual([240, 0, 0])
+
+  await page.getByRole('button', { name: 'Salary', exact: true }).click()
+  await page.getByRole('button', { name: 'Run recovery' }).click()
+  await expect(page.getByRole('status')).toContainText('Sorting attack incomplete: sparse support')
+  await expect(page.getByRole('button', { name: 'Reveal sealed truth' })).toBeDisabled()
 })
 
 test('changing auxiliary data retires recovery while a no-op scheme selection does not', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Run recovery' }).click()
-  await page.getByRole('button', { name: 'Department / equality' }).click()
+  await page.getByRole('button', { name: 'Department', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Reveal sealed truth' })).toBeEnabled()
   await page.getByLabel('Public population').selectOption('shifted')
   await expect(page.getByRole('status')).toContainText('Previous recovery retired')
@@ -58,7 +64,8 @@ test('authenticated deterministic ciphertexts can still be recovered', async ({ 
 
 test('pairwise MSDB tree and cumulative matching recover salary but shifted statistics degrade it', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Salary / ORE' }).click()
+  await page.getByRole('button', { name: 'Salary', exact: true }).click()
+  await page.getByRole('button', { name: 'ORE', exact: true }).click()
   await page.getByRole('button', { name: 'Run recovery' }).click()
   await expect(page.getByRole('status')).toContainText('28,680 pairwise CLWW comparisons')
   await page.getByRole('button', { name: 'Reveal sealed truth' }).click()
@@ -72,9 +79,25 @@ test('pairwise MSDB tree and cumulative matching recover salary but shifted stat
 
 test('mismatched auxiliary support is named and recovery fails closed', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Salary / ORE' }).click()
+  await page.getByRole('button', { name: 'Salary', exact: true }).click()
+  await page.getByRole('button', { name: 'ORE', exact: true }).click()
   await page.getByLabel('Public population').selectOption('mismatch')
   await page.getByRole('button', { name: 'Run recovery' }).click()
   await expect(page.getByRole('status')).toContainText('RECOVERY REJECTED: Auxiliary support mismatch')
   await expect(page.getByRole('button', { name: 'Reveal sealed truth' })).toBeDisabled()
+})
+
+test('every column is interactive under DTE, OPE, ORE, and randomized control', async ({ page }) => {
+  await page.goto('/')
+  for (const column of ['Department', 'Age', 'Salary']) {
+    await page.getByRole('button', { name: column, exact: true }).click()
+    for (const scheme of ['DTE', 'OPE', 'ORE', 'Randomized control']) {
+      await page.getByRole('button', { name: scheme, exact: true }).click()
+      await page.getByRole('button', { name: scheme, exact: true }).evaluate((button) => {
+        if (button.getAttribute('aria-pressed') !== 'true') throw new Error('Matrix position was not selected.')
+      })
+      await page.getByRole('button', { name: scheme === 'Randomized control' ? 'Try a query' : 'Run query on ciphertexts' }).click()
+      await expect(page.getByRole('status')).toContainText(scheme === 'Randomized control' ? 'Cannot sort ciphertexts' : scheme === 'DTE' ? 'Equality query' : 'Range query')
+    }
+  }
 })
