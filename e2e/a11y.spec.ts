@@ -1,22 +1,47 @@
-import { expect, test } from '@playwright/test'
-import AxeBuilder from '@axe-core/playwright'
+import { expect, test } from '@playwright/test';
+import {
+  boot,
+  driveAllStates,
+  expectBaselineNotStale,
+  NARROW,
+  reportCollected,
+  watchPageErrors,
+} from './gate';
 
-test('the production exhibit has no WCAG 2.1 A/AA violations', async ({ page }) => {
-  await page.emulateMedia({ reducedMotion: 'reduce' })
-  await page.goto('/')
-  await expect(page.getByRole('heading', { name: 'Order Leak' })).toBeVisible()
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
-  expect(await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches)).toBe(true)
+/**
+ * WCAG A/AA regression gate.
+ *
+ * The lab is scanned on arrival and after each department, age, salary, and
+ * randomized-control query, recovery, and reveal. The drive also covers a
+ * shifted auxiliary population retiring prior recovery, the 24-row warning
+ * and 240-row restoration, the method disclosure, the skip link, hover states,
+ * and focus on commands, selects, summary, and both table scrollers. Every
+ * state is measured in the lab's dark theme at desktop and 380px.
+ *
+ * See `gate.ts` for the independent WCAG and landmark axe runs, arithmetic
+ * text contrast, aria-hidden contrast, non-text contrast ratchet, keyboard
+ * scroller/focus checks, reflow, reduced-motion, and blank-render assertions.
+ */
 
-  for (const prepare of [
-    async () => {},
-    async () => { await page.getByRole('button', { name: 'Salary / ORE' }).click(); await page.getByRole('button', { name: 'Run recovery' }).click() },
-    async () => { await page.getByRole('button', { name: 'Randomized control' }).click(); await page.getByRole('button', { name: 'Run recovery' }).click(); await page.getByRole('button', { name: 'Reveal sealed truth' }).click() },
-    async () => { await page.locator('#row-count').selectOption('24') },
-  ]) {
-    await prepare()
-    const scan = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze()
-    expect(scan.violations, JSON.stringify(scan.violations, null, 2)).toEqual([])
-    expect(scan.incomplete, JSON.stringify(scan.incomplete, null, 2)).toEqual([])
-  }
-})
+for (const theme of ['dark'] as const) {
+  test(`no WCAG A/AA violations in ${theme} theme`, async ({ page }) => {
+    test.setTimeout(1_800_000);
+    const errors = watchPageErrors(page);
+    await boot(page, theme);
+    await driveAllStates(page, theme);
+    expect(errors, errors.join('\n')).toEqual([]);
+    expectBaselineNotStale();
+    reportCollected();
+  });
+
+  test(`no WCAG A/AA violations in ${theme} theme at 380px`, async ({ page }) => {
+    test.setTimeout(1_800_000);
+    const errors = watchPageErrors(page);
+    await page.setViewportSize(NARROW);
+    await boot(page, theme);
+    await driveAllStates(page, `${theme} @380px`);
+    expect(errors, errors.join('\n')).toEqual([]);
+    expectBaselineNotStale();
+    reportCollected();
+  });
+}
