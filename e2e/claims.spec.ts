@@ -69,3 +69,12 @@ test('pairwise MSDB tree and cumulative matching recover salary but shifted stat
   await page.getByRole('button', { name: 'Reveal sealed truth' }).click()
   await expect(page.locator('[data-score]')).not.toHaveAttribute('data-score', '240/240')
 })
+
+test('mismatched auxiliary support is named and recovery fails closed', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Salary / ORE' }).click()
+  await page.getByLabel('Public population').selectOption('mismatch')
+  await page.getByRole('button', { name: 'Run recovery' }).click()
+  await expect(page.getByRole('status')).toContainText('RECOVERY REJECTED: Auxiliary support mismatch')
+  await expect(page.getByRole('button', { name: 'Reveal sealed truth' })).toBeDisabled()
+})

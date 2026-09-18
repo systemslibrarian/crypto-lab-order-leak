@@ -608,6 +608,11 @@ export async function driveAllStates(page: Page, theme: string): Promise<void> {
   await expect(page.getByText('Auxiliary population changed. Previous recovery retired.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Reveal sealed truth' })).toBeDisabled();
   await scanAt('shifted public population retires the department recovery');
+  await page.locator('#population').selectOption('mismatch');
+  await page.getByRole('button', { name: 'Run recovery' }).click();
+  await expect(page.getByRole('status')).toContainText('RECOVERY REJECTED: Auxiliary support mismatch');
+  await expect(page.getByRole('button', { name: 'Reveal sealed truth' })).toBeDisabled();
+  await scanAt('mismatched public support rejects department recovery');
   await page.locator('#population').selectOption('matching');
   await expect(page.locator('#population')).toHaveValue('matching');
 

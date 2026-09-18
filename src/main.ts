@@ -5,7 +5,7 @@ import { compareOreObservations, recoverOreTree } from './attack/msdb'
 import { sortingRecover } from './attack/sorting'
 import { encryptedAgeRange, encryptedEquality, encryptedSalaryAtLeast, encryptedSalarySort } from './db/query'
 import { makeTable, sealTable, type Person } from './db/table'
-import { publicAgeValues, publicDepartmentDistribution, publicSalaryValues } from './data/public'
+import { publicAgeValues, publicDepartmentDistribution, publicSalaryValues, type AuxiliaryPopulation } from './data/public'
 import { dteEncrypt, dteTagVerifies, toHex } from './ppe/dte'
 import { opeEncrypt } from './ppe/ope-bclo'
 import { oreEncrypt, oreSetup, serializeOre } from './ppe/ore-clww'
@@ -18,7 +18,7 @@ let sealed = await sealTable(rows, oreKey)
 let revealed = false
 let recovered = new Map<number, string | number | null>()
 let mode: 'department' | 'age' | 'salary' | 'control' = 'department'
-let auxiliaryShifted = false
+let auxiliaryPopulation: AuxiliaryPopulation = 'matching'
 let status = 'Choose a property-preserving column, then make the database answer a query without decrypting.'
 
 const abbreviate = (value: string | number) => String(value).length > 15 ? `${String(value).slice(0, 15)}...` : String(value)
@@ -36,16 +36,23 @@ function query() {
 
 function recover() {
   recovered = new Map()
-  if (mode === 'department') recovered = frequencyRecover(sealed.map((row) => ({ id: row.id, ciphertext: row.department })), publicDepartmentDistribution(rows.length, auxiliaryShifted))
-  if (mode === 'age') recovered = sortingRecover(sealed.map((row) => ({ id: row.id, ciphertext: row.age })), publicAgeValues(rows.length))
-  if (mode === 'salary') {
-    const observations = sealed.map((row) => ({ id: row.id, ciphertext: row.salary }))
-    const tree = recoverOreTree(observations)
-    recovered = cumulativeRecover(observations, publicSalaryValues(rows.length, auxiliaryShifted), compareOreObservations)
-    status = `Cumulative matching used ${tree.pairs.length.toLocaleString()} pairwise CLWW comparisons; the recovered radix tree begins at MSDB depth ${tree.tree?.kind === 'branch' ? tree.tree.depth : 'none'}. No key was imported.`
+  try {
+    if (mode === 'department') recovered = frequencyRecover(sealed.map((row) => ({ id: row.id, ciphertext: row.department })), publicDepartmentDistribution(rows.length, auxiliaryPopulation))
+    if (mode === 'age') recovered = sortingRecover(sealed.map((row) => ({ id: row.id, ciphertext: row.age })), auxiliaryPopulation === 'mismatch' ? publicAgeValues(rows.length).filter((value) => value !== 65) : publicAgeValues(rows.length))
+    if (mode === 'salary') {
+      const observations = sealed.map((row) => ({ id: row.id, ciphertext: row.salary }))
+      const tree = recoverOreTree(observations)
+      recovered = cumulativeRecover(observations, publicSalaryValues(rows.length, auxiliaryPopulation), compareOreObservations)
+      status = `Cumulative matching used ${tree.pairs.length.toLocaleString()} pairwise CLWW comparisons; the recovered radix tree begins at MSDB depth ${tree.tree?.kind === 'branch' ? tree.tree.depth : 'none'}. No key was imported.`
+    }
+  } catch (error) {
+    status = `RECOVERY REJECTED: ${error instanceof Error ? error.message : 'Auxiliary support mismatch.'}`
+    revealed = false
+    render()
+    return
   }
   if (mode === 'control') status = 'NOTHING RECOVERED: randomized ciphertexts carry no stable equality or order relation.'
-  else if (mode !== 'salary') status = `Recovery ran against ciphertexts and ${auxiliaryShifted ? 'a shifted' : 'the matching synthetic'} public population only. No key was imported by the attacker module.`
+  else if (mode !== 'salary') status = `Recovery ran against ciphertexts and ${auxiliaryPopulation === 'shifted' ? 'a shifted' : 'the matching synthetic'} public population only. No key was imported by the attacker module.`
   revealed = false
   render()
 }
@@ -55,7 +62,7 @@ function score() {
 }
 
 function render() {
-  const publicBars = Object.entries(publicDepartmentDistribution(rows.length, auxiliaryShifted)).map(([name, count]) => `<div class="bar-row"><span>${name}</span><i style="width:${(count / rows.length) * 100}%"></i><b>${count}</b></div>`).join('')
+  const publicBars = Object.entries(publicDepartmentDistribution(rows.length, auxiliaryPopulation)).map(([name, count]) => `<div class="bar-row"><span>${name}</span><i style="width:${(count / rows.length) * 100}%"></i><b>${count}</b></div>`).join('')
   const scorecard = score()
   const isControl = mode === 'control'
   app.innerHTML = `
@@ -67,7 +74,7 @@ function render() {
     <section class="steps" aria-label="Lab steps"><span>1. Pick a column</span><span>2. Query ciphertexts</span><span>3. Recover</span><span>4. Reveal truth</span></section>
     <section class="controls" aria-label="Choose a column"><div class="segmented" role="group" aria-label="Encryption scheme">
       ${(['department', 'age', 'salary', 'control'] as const).map((choice) => `<button class="${mode === choice ? 'active' : ''}" data-mode="${choice}" aria-pressed="${mode === choice}">${choice === 'department' ? 'Department / equality' : choice === 'age' ? 'Age / order' : choice === 'salary' ? 'Salary / ORE' : 'Randomized control'}</button>`).join('')}
-    </div><div class="control-pair"><label>Rows <select id="row-count"><option value="24" ${rows.length === 24 ? 'selected' : ''}>24 (tiny)</option><option value="240" ${rows.length === 240 ? 'selected' : ''}>240</option><option value="500" ${rows.length === 500 ? 'selected' : ''}>500</option><option value="1000" ${rows.length === 1000 ? 'selected' : ''}>1,000</option></select></label><label>Public population <select id="population"><option value="matching" ${!auxiliaryShifted ? 'selected' : ''}>Matching synthetic</option><option value="shifted" ${auxiliaryShifted ? 'selected' : ''}>Shifted population</option></select></label></div></section>
+    </div><div class="control-pair"><label>Rows <select id="row-count"><option value="24" ${rows.length === 24 ? 'selected' : ''}>24 (tiny)</option><option value="240" ${rows.length === 240 ? 'selected' : ''}>240</option><option value="500" ${rows.length === 500 ? 'selected' : ''}>500</option><option value="1000" ${rows.length === 1000 ? 'selected' : ''}>1,000</option></select></label><label>Public population <select id="population"><option value="matching" ${auxiliaryPopulation === 'matching' ? 'selected' : ''}>Matching synthetic</option><option value="shifted" ${auxiliaryPopulation === 'shifted' ? 'selected' : ''}>Shifted population</option><option value="mismatch" ${auxiliaryPopulation === 'mismatch' ? 'selected' : ''}>Mismatched support</option></select></label></div></section>
     ${rows.length < 30 ? '<p class="warning" role="status">SAMPLE WARNING: fewer than 30 rows makes frequency statistics unstable. Treat this result as an illustration, not evidence.</p>' : ''}
     <section class="lab-grid">
       <article class="panel dba"><div class="panel-title"><span>DBA VIEW</span><small>${scheme()} · leaky by design</small></div><p>The database sees sealed values and never needs the plaintext key to evaluate the selected relation.</p><button class="command" id="query" ${isControl ? '' : ''}>${isControl ? 'Try a query' : 'Run query on ciphertexts'}</button><output class="status neutral" role="status" aria-live="polite">${status}</output>
@@ -93,7 +100,7 @@ function render() {
   app.querySelector<HTMLButtonElement>('#recover')!.addEventListener('click', recover)
   app.querySelector<HTMLButtonElement>('#reveal')!.addEventListener('click', () => { revealed = true; render() })
   app.querySelector<HTMLSelectElement>('#row-count')!.addEventListener('change', async (event) => { rows = makeTable(Number((event.target as HTMLSelectElement).value)); sealed = await sealTable(rows, oreKey); recovered = new Map(); revealed = false; status = 'Dataset reshuffled. Previous recovery retired.'; render() })
-  app.querySelector<HTMLSelectElement>('#population')!.addEventListener('change', (event) => { auxiliaryShifted = (event.target as HTMLSelectElement).value === 'shifted'; recovered = new Map(); revealed = false; status = 'Auxiliary population changed. Previous recovery retired.'; render() })
+  app.querySelector<HTMLSelectElement>('#population')!.addEventListener('change', (event) => { auxiliaryPopulation = (event.target as HTMLSelectElement).value as AuxiliaryPopulation; recovered = new Map(); revealed = false; status = 'Auxiliary population changed. Previous recovery retired.'; render() })
 }
 
 render()
