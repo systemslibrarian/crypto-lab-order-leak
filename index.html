@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <script>
+      (function () {
+        try { localStorage.setItem('theme', 'dark') } catch (error) {}
+        document.documentElement.setAttribute('data-theme', 'dark')
+      })()
+    </script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="A browser demonstration of equality and order leakage in deterministic encryption, OPE, and ORE." />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,&lt;svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'&gt;&lt;text y='.9em' font-size='90'&gt;📊&lt;/text&gt;&lt;/svg&gt;" />
+    <title>Order Leak — crypto-lab</title>
+  </head>
+  <body>
+    <a class="skip-link" href="#app">Skip to the lab</a>
+    <header class="cl-topbar" role="banner">
+      <a class="brand" href="https://crypto-lab.systemslibrarian.dev/">CRYPTO LAB <span> / ORDER LEAK</span></a>
+      <nav aria-label="Lab links"><a href="https://github.com/systemslibrarian/crypto-lab-order-leak">SOURCE</a></nav>
+    </header>
+    <main id="app"></main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
