@@ -4,7 +4,11 @@ import { sha256 } from '@noble/hashes/sha2.js'
 const DOMAIN = 256
 const RANGE = 65536
 const encoder = new TextEncoder()
-const OPE_KEY = new Uint8Array(32).fill(0x73)
+// Per-session BCLO key (template §0.6). It was `new Uint8Array(32).fill(0x73)`,
+// which shipped the key that seeds the whole order-preserving map in the
+// bundle. BCLO's map is supposed to be key-dependent and secret; only the
+// order it preserves is public, and that is what the attack panel uses.
+const OPE_KEY = crypto.getRandomValues(new Uint8Array(32))
 
 function combinations(total: number, selected: number): bigint {
   const count = Math.min(selected, total - selected)

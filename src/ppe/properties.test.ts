@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { opeEncrypt, sampleHypergeometric } from './ope-bclo'
 import { oreCompare, oreEncrypt, oreMsdb, oreSetup, serializeOre, validateOreCiphertext } from './ore-clww'
 
@@ -37,6 +37,14 @@ describe('property-preserving primitives', () => {
     const second = oreSetup()
     expect(first).toHaveLength(32)
     expect(first).not.toEqual(second)
+  })
+  it('derives the BCLO map from fresh session key material, and stays monotone under a re-key', async () => {
+    const before = Array.from({ length: 256 }, (_, value) => opeEncrypt(value))
+    vi.resetModules()
+    const reloaded = await import('./ope-bclo')
+    const after = Array.from({ length: 256 }, (_, value) => reloaded.opeEncrypt(value))
+    expect(after).not.toEqual(before)
+    for (let value = 0; value < 255; value++) expect(after[value]).toBeLessThan(after[value + 1])
   })
   it('the exact hypergeometric sampler stays inside its mathematical support', () => {
     expect(sampleHypergeometric(10, 3, 9, 'forced-support')).toBeGreaterThanOrEqual(2)

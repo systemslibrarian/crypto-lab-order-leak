@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { aesGcmSivEncrypt, dteDecrypt, dteEncrypt, dteTagVerifies, toHex } from './dte'
+import { describe, expect, it, vi } from 'vitest'
+import { aesGcmSivEncrypt, dteDecrypt, dteEncrypt, dteSessionKey, dteSessionNonce, dteTagVerifies, toHex } from './dte'
 
 const fromHex = (hex: string) => Uint8Array.from(hex.match(/.{2}/g)!.map((part) => parseInt(part, 16)))
 
@@ -14,6 +14,18 @@ describe('deterministic AES-GCM-SIV', () => {
     const ciphertext = dteEncrypt('Finance')
     ciphertext[ciphertext.length - 1] ^= 1
     expect(dteTagVerifies(ciphertext)).toBe(false)
+  })
+
+  it('draws fresh session key material instead of shipping a constant', async () => {
+    expect(dteSessionKey()).toHaveLength(32)
+    expect(dteSessionNonce()).toHaveLength(12)
+    expect(new Set(dteSessionKey()).size).toBeGreaterThan(1)
+    expect(new Set(dteSessionNonce()).size).toBeGreaterThan(1)
+
+    vi.resetModules()
+    const reloaded = await import('./dte')
+    expect([...reloaded.dteSessionKey()]).not.toEqual([...dteSessionKey()])
+    expect([...reloaded.dteSessionNonce()]).not.toEqual([...dteSessionNonce()])
   })
 
   it.each([
