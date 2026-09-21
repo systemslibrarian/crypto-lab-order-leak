@@ -5,10 +5,10 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: 'list',
-  use: { baseURL: 'http://localhost:4627/crypto-lab-order-leak/', colorScheme: 'dark' },
+  use: { baseURL: 'http://localhost:4201/crypto-lab-order-leak/', colorScheme: 'dark' },
   webServer: {
     command: 'npm run build && npm run preview -- --port 4627 --strictPort',
-    url: 'http://localhost:4627/crypto-lab-order-leak/',
+    url: 'http://localhost:4201/crypto-lab-order-leak/',
     reuseExistingServer: !process.env.CI,
   },
 })
