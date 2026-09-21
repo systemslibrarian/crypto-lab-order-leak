@@ -23,7 +23,20 @@ let recovered = new Map<number, string | number | null>()
 let column: DataColumn = 'department'
 let selectedScheme: QueryableScheme | 'control' = 'dte'
 let auxiliaryPopulation: AuxiliaryPopulation = 'matching'
-let status = 'Choose a column and scheme, then make the database answer a query without decrypting.'
+
+/**
+ * The run status is a verdict, so its sentence and its machine-readable state
+ * are chosen in ONE place and cannot disagree. Template §4.1c, brief Fix 1: a
+ * mutation that rewrites the words without moving `result` leaves the page
+ * contradicting itself, and `expectVerdict` asserts both in a single call.
+ */
+type RunResult = 'idle' | 'retired' | 'queried' | 'recovered' | 'rejected' | 'control-held' | 'control-broken'
+type RunStatus = { text: string; result: RunResult }
+let status: RunStatus = {
+  text: 'Choose a column and scheme, then make the database answer a query without decrypting.',
+  result: 'idle',
+}
+const retired = (): RunStatus => ({ text: `Selected ${columnName()} under ${schemeName()}. Previous recovery retired.`, result: 'retired' })
 
 const selected = () => rows.slice(0, 18)
 const actual = (row: Person) => row[column]
@@ -85,17 +98,23 @@ async function query() {
     const matched = encryptedEquality(sealed, column, 'control', token).length
     const classes = equalityClasses(sealed.map((row) => ({ id: row.id, ciphertext: row[column].control })))
     status = matched === 0
-      ? `Equality query for ${target} matched ${matched} of ${sealed.length} sealed rows. Re-encrypting the same value produced a ciphertext no stored row equals, and ${classes.distinct} of ${sealed.length} stored ciphertexts are distinct, so there is no equality or order relation to index on.`
-      : `Equality query for ${target} matched ${matched} of ${sealed.length} sealed rows, and only ${classes.distinct} of ${sealed.length} stored ciphertexts are distinct. This column is NOT behaving as a randomized control: equal values are producing equal ciphertexts.`
+      ? {
+        text: `Equality query for ${target} matched ${matched} of ${sealed.length} sealed rows. Re-encrypting the same value produced a ciphertext no stored row equals, and ${classes.distinct} of ${sealed.length} stored ciphertexts are distinct, so there is no equality or order relation to index on.`,
+        result: 'control-held',
+      }
+      : {
+        text: `Equality query for ${target} matched ${matched} of ${sealed.length} sealed rows, and only ${classes.distinct} of ${sealed.length} stored ciphertexts are distinct. This column is NOT behaving as a randomized control: equal values are producing equal ciphertexts.`,
+        result: 'control-broken',
+      }
   } else if (selectedScheme === 'dte') {
     const target = equalityTarget()
     const token = toHex(dteEncrypt(`${column}:${target}`))
-    status = `Equality query for ${target} matched ${encryptedEquality(sealed, column, 'dte', token).length} sealed rows; the server compared a client-generated token.`
+    status = { text: `Equality query for ${target} matched ${encryptedEquality(sealed, column, 'dte', token).length} sealed rows; the server compared a client-generated token.`, result: 'queried' }
   } else {
     const [minimum, maximum] = queryBounds()
     const encrypt = selectedScheme === 'ope' ? opeEncrypt : (value: number) => oreEncrypt(oreKey, value)
     const matched = encryptedRange(sealed, column, selectedScheme, encrypt(minimum), encrypt(maximum)).length
-    status = `Range query ${minimum}-${maximum} matched ${matched} sealed rows; ORDER BY returned ${encryptedSort(sealed, column, selectedScheme).length} rows without decryption.`
+    status = { text: `Range query ${minimum}-${maximum} matched ${matched} sealed rows; ORDER BY returned ${encryptedSort(sealed, column, selectedScheme).length} rows without decryption.`, result: 'queried' }
   }
   render()
 }
@@ -110,17 +129,17 @@ function recover() {
       }, {})
       const guesses = frequencyRecover(sealed.map((row) => ({ id: row.id, ciphertext: row[column].dte })), auxiliary)
       recovered = new Map([...guesses].map(([id, guess]) => [id, column === 'department' || guess === null ? guess : Number(guess)]))
-      status = 'Frequency matching aligned deterministic ciphertext buckets to public counts. No key was imported.'
+      status = { text: 'Frequency matching aligned deterministic ciphertext buckets to public counts. No key was imported.', result: 'recovered' }
     } else if (selectedScheme === 'ope') {
       const guesses = sortingRecover(sealed.map((row) => ({ id: row.id, ciphertext: row[column].ope })), encodedPublicValues())
       recovered = new Map([...guesses].map(([id, guess]) => [id, decodeGuess(guess)]))
-      status = `Sorting attack aligned the ${column === 'age' ? 'dense' : 'ordered'} ciphertext column to public ranks. No key was imported.`
+      status = { text: `Sorting attack aligned the ${column === 'age' ? 'dense' : 'ordered'} ciphertext column to public ranks. No key was imported.`, result: 'recovered' }
     } else if (selectedScheme === 'ore') {
       const observations = sealed.map((row) => ({ id: row.id, ciphertext: row[column].ore }))
       const tree = recoverOreTree(observations)
       const guesses = cumulativeRecover(observations, encodedPublicValues(), compareOreObservations)
       recovered = new Map([...guesses].map(([id, guess]) => [id, decodeGuess(guess)]))
-      status = `Cumulative matching used ${tree.pairs.length.toLocaleString()} pairwise CLWW comparisons; the recovered radix tree begins at MSDB depth ${tree.tree?.kind === 'branch' ? tree.tree.depth : 'none'}. No key was imported.`
+      status = { text: `Cumulative matching used ${tree.pairs.length.toLocaleString()} pairwise CLWW comparisons; the recovered radix tree begins at MSDB depth ${tree.tree?.kind === 'branch' ? tree.tree.depth : 'none'}. No key was imported.`, result: 'recovered' }
     } else {
       // The control is attacked with the same frequency machinery as DTE. It is
       // only a control if it survives the attack when the attack actually runs.
@@ -128,7 +147,7 @@ function recover() {
       const classes = equalityClasses(observations)
       if (classes.reusable === 0) {
         recovered = new Map(observations.map(({ id }) => [id, null]))
-        status = `Frequency matching grouped ${observations.length} rows into ${classes.distinct} ciphertext buckets, largest ${classes.largest}. No bucket holds more than one row, so no count can be aligned to a public count.`
+        status = { text: `Frequency matching grouped ${observations.length} rows into ${classes.distinct} ciphertext buckets, largest ${classes.largest}. No bucket holds more than one row, so no count can be aligned to a public count.`, result: 'control-held' }
       } else {
         const auxiliary = publicValues().reduce<Record<string, number>>((counts, value) => {
           counts[value] = (counts[value] ?? 0) + 1
@@ -136,11 +155,11 @@ function recover() {
         }, {})
         const guesses = frequencyRecover(observations, auxiliary)
         recovered = new Map([...guesses].map(([id, guess]) => [id, column === 'department' || guess === null ? guess : Number(guess)]))
-        status = `Frequency matching grouped ${observations.length} rows into only ${classes.distinct} ciphertext buckets, largest ${classes.largest}. The randomized column leaked equality and the deterministic attack applied to it.`
+        status = { text: `Frequency matching grouped ${observations.length} rows into only ${classes.distinct} ciphertext buckets, largest ${classes.largest}. The randomized column leaked equality and the deterministic attack applied to it.`, result: 'control-broken' }
       }
     }
   } catch (error) {
-    status = `RECOVERY REJECTED: ${error instanceof Error ? error.message : 'Auxiliary support mismatch.'}`
+    status = { text: `RECOVERY REJECTED: ${error instanceof Error ? error.message : 'Auxiliary support mismatch.'}`, result: 'rejected' }
     revealed = false
     render()
     return
@@ -165,8 +184,30 @@ function render() {
     counts[value] = (counts[value] ?? 0) + 1
     return counts
   }, {})
-  const publicBars = Object.entries(distribution).slice(0, 12).map(([name, count]) => `<div class="bar-row"><span>${name}</span><i style="width:${(count / rows.length) * 100}%"></i><b>${count}</b></div>`).join('')
+  const publicBars = Object.entries(distribution).slice(0, 12).map(([name, count]) => `<div class="bar-row"><span data-claim="public-value" data-value="${name}">${name}</span><i style="width:${(count / rows.length) * 100}%"></i><b data-claim="public-count" data-value="${count}">${count}</b></div>`).join('')
   const scorecard = score()
+  // Every rendered verdict picks its words, its `data-result` and its paint in
+  // one expression, so no mutation can move one without the others (Fix 1).
+  const scoreVerdict = scorecard.matched === 0 && scorecard.mismatched === 0
+    ? { text: `NOTHING RECOVERED · ${scorecard.unresolved} of ${rows.length} AMBIGUOUS`, result: 'none', className: 'control-ok' }
+    : scorecard.matched === 0
+      ? { text: `${scorecard.matched} MATCHED · ${scorecard.mismatched} MISMATCHED · ${scorecard.unresolved} AMBIGUOUS`, result: 'mismatched', className: 'control-ok' }
+      : { text: `${scorecard.matched} MATCHED · ${scorecard.mismatched} MISMATCHED · ${scorecard.unresolved} AMBIGUOUS`, result: 'recovered', className: 'alarm-text' }
+  const rowOutcome = (row: Person) => {
+    const guess = recovered.get(row.id)
+    if (!revealed) {
+      if (guess === undefined) return { text: 'WAITING', result: 'waiting', className: '' }
+      return guess === null
+        ? { text: '? AMBIGUOUS', result: 'ambiguous', className: 'amber-text' }
+        : { text: '! RECOVERED', result: 'recovered', className: 'alarm-text' }
+    }
+    if (guess === actual(row)) return { text: '! RECOVERED', result: 'recovered', className: 'alarm-text' }
+    return guess == null
+      ? { text: '? AMBIGUOUS', result: 'ambiguous', className: 'amber-text' }
+      : { text: '! MISMATCH', result: 'mismatch', className: '' }
+  }
+  const tagsVerify = sealed.every((row) => dteTagVerifies(Uint8Array.from(row.department.dte.match(/.{1,2}/g)!.map((part) => parseInt(part, 16)))))
+  const tagVerdict = tagsVerify ? { text: 'TAGS VERIFIED', result: 'pass' } : { text: 'TAG FAILURE', result: 'fail' }
   const isControl = selectedScheme === 'control'
   const currentLesson = lesson()
   const attackDescription = selectedScheme === 'dte'
@@ -190,16 +231,16 @@ function render() {
       ${(['dte', 'ope', 'ore', 'control'] as const).map((choice) => `<button class="${selectedScheme === choice ? 'active' : ''}" data-scheme="${choice}" aria-pressed="${selectedScheme === choice}">${choice === 'dte' ? 'Deterministic (DTE)' : choice === 'ope' ? 'Order-preserving (OPE)' : choice === 'ore' ? 'Order-revealing (ORE)' : 'Randomized control'}</button>`).join('')}
     </div></div></div><div class="control-pair"><label>Rows <select id="row-count"><option value="24" ${rows.length === 24 ? 'selected' : ''}>24 (tiny)</option><option value="240" ${rows.length === 240 ? 'selected' : ''}>240</option><option value="500" ${rows.length === 500 ? 'selected' : ''}>500</option><option value="1000" ${rows.length === 1000 ? 'selected' : ''}>1,000</option></select></label><label>Public population <select id="population"><option value="matching" ${auxiliaryPopulation === 'matching' ? 'selected' : ''}>Matching synthetic</option><option value="shifted" ${auxiliaryPopulation === 'shifted' ? 'selected' : ''}>Shifted population</option><option value="mismatch" ${auxiliaryPopulation === 'mismatch' ? 'selected' : ''}>Mismatched support</option></select></label></div></section>
     <section class="leakage-ledger" aria-labelledby="tradeoff-title"><div class="ledger-heading"><span>SELECTED EXPERIMENT</span><h2 id="tradeoff-title">${columnName()} under ${schemeName()}</h2></div><div class="ledger-facts"><div><b>DATABASE GAINS</b><p>${currentLesson.feature}</p></div><div><b>PATTERN LEFT VISIBLE</b><p>${currentLesson.leak}</p></div><div class="${isControl ? 'safe-fact' : 'danger-fact'}"><b>ATTACKER CAN</b><p>${currentLesson.attack}</p></div></div></section>
-    ${rows.length < 30 ? '<p class="warning" role="status">SAMPLE WARNING: fewer than 30 rows makes frequency statistics unstable. Treat this result as an illustration, not evidence.</p>' : ''}
+    ${rows.length < 30 ? `<p class="warning" role="status" data-verdict="sample-warning" data-result="unstable">SAMPLE WARNING: ${rows.length} rows is fewer than the 30 that make frequency statistics stable. Treat this result as an illustration, not evidence.</p>` : ''}
     <section class="lab-grid">
-      <article class="panel dba"><div class="panel-title"><span>DBA VIEW</span><small>${columnName()} · ${schemeName()} · ${isControl ? 'control' : 'leaky by design'}</small></div><p>The database sees sealed values and evaluates only the selected ciphertext relation.</p><button class="command" id="query">${isControl ? 'Try a query' : 'Run query on ciphertexts'}</button><output class="status neutral" role="status" aria-live="polite" data-verdict="run-status">${status}</output>
-      <div class="table-wrap" tabindex="0" role="region" aria-label="Sealed database rows"><table><thead><tr><th>ROW</th><th>SEALED VALUE</th><th>PROPERTY</th></tr></thead><tbody>${selected().map((row) => `<tr><td>${row.id}</td><td class="cipher">${ciphertextFor(row.id)}</td><td>${isControl ? 'none' : selectedScheme === 'dte' ? '=' : selectedScheme === 'ore' ? 'order + MSDB' : 'order'}</td></tr>`).join('')}</tbody></table></div></article>
+      <article class="panel dba"><div class="panel-title"><span>DBA VIEW</span><small>${columnName()} · ${schemeName()} · ${isControl ? 'control' : 'leaky by design'}</small></div><p>The database sees sealed values and evaluates only the selected ciphertext relation.</p><button class="command" id="query">${isControl ? 'Try a query' : 'Run query on ciphertexts'}</button><output class="status neutral" role="status" aria-live="polite" data-verdict="run-status" data-result="${status.result}">${status.text}</output>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Sealed database rows"><table><thead><tr><th>ROW</th><th>SEALED VALUE</th><th>PROPERTY</th></tr></thead><tbody>${selected().map((row) => { const cipher = ciphertextFor(row.id); return `<tr><td data-claim="row-id" data-value="${row.id}">${row.id}</td><td class="cipher" data-claim="sealed-cipher" data-value="${cipher}">${cipher}</td><td>${isControl ? 'none' : selectedScheme === 'dte' ? '=' : selectedScheme === 'ore' ? 'order + MSDB' : 'order'}</td></tr>` }).join('')}</tbody></table></div></article>
       <article class="panel attacker"><div class="panel-title"><span>ATTACKER VIEW</span><small>ciphertexts + public statistics</small></div><p>There is no key here. ${attackDescription}</p>
       <div class="histogram" role="group" aria-label="Public distribution">${publicBars}</div><button class="command alarm" id="recover">Run recovery</button>
-      <div class="table-wrap" tabindex="0" role="region" aria-label="Recovered attacker rows"><table><thead><tr><th>ROW</th><th>RECOVERED</th><th>VERDICT</th></tr></thead><tbody>${selected().map((row) => { const guess = recovered.get(row.id); const verdict = !revealed ? (guess === undefined ? 'WAITING' : guess === null ? '? AMBIGUOUS' : '! RECOVERED') : guess === actual(row) ? '! RECOVERED' : guess == null ? '? AMBIGUOUS' : '! MISMATCH'; return `<tr><td>${row.id}</td><td>${guess === undefined ? '—' : guess === null ? 'ambiguous' : guess}</td><td data-verdict="row-outcome" class="${verdict.includes('RECOVERED') ? 'alarm-text' : verdict.includes('AMBIGUOUS') ? 'amber-text' : ''}">${verdict}</td></tr>` }).join('')}</tbody></table></div>
-      <div class="reveal"><button class="command secondary" id="reveal" ${recovered.size ? '' : 'disabled'}>Reveal sealed truth</button>${revealed ? `<strong class="${scorecard.matched === 0 ? 'control-ok' : 'alarm-text'}" data-verdict="recovery-score" data-score="${scorecard.matched}/${rows.length}">${scorecard.matched === 0 && scorecard.mismatched === 0 ? `NOTHING RECOVERED · ${scorecard.unresolved} of ${rows.length} AMBIGUOUS` : `${scorecard.matched} MATCHED · ${scorecard.mismatched} MISMATCHED · ${scorecard.unresolved} AMBIGUOUS`}</strong>` : ''}</div></article>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Recovered attacker rows"><table><thead><tr><th>ROW</th><th>RECOVERED</th><th>VERDICT</th></tr></thead><tbody>${selected().map((row) => { const guess = recovered.get(row.id); const verdict = rowOutcome(row); const shown = guess === undefined ? '—' : guess === null ? 'ambiguous' : String(guess); return `<tr><td data-claim="row-id" data-value="${row.id}">${row.id}</td><td data-claim="attack-guess" data-value="${guess === undefined ? 'pending' : guess === null ? 'ambiguous' : guess}">${shown}</td><td data-verdict="row-outcome" data-result="${verdict.result}" class="${verdict.className}">${verdict.text}</td></tr>` }).join('')}</tbody></table></div>
+      <div class="reveal"><button class="command secondary" id="reveal" ${recovered.size ? '' : 'disabled'}>Reveal sealed truth</button>${revealed ? `<strong class="${scoreVerdict.className}" data-verdict="recovery-score" data-result="${scoreVerdict.result}" data-score="${scorecard.matched}/${rows.length}">${scoreVerdict.text}</strong>` : ''}</div></article>
     </section>
-    <section class="evidence"><h2>Authenticated, never decrypted, and recovered</h2><p>Every deterministic AES-GCM-SIV department ciphertext has a valid authentication tag: <strong data-verdict="dte-tags">${sealed.every((row) => dteTagVerifies(Uint8Array.from(row.department.dte.match(/.{1,2}/g)!.map((part) => parseInt(part, 16))))) ? 'TAGS VERIFIED' : 'TAG FAILURE'}</strong>. The query module holds no key, equality still succeeds, and frequency analysis recovers cells from public counts.</p></section>
+    <section class="evidence"><h2>Authenticated, never decrypted, and recovered</h2><p>Every deterministic AES-GCM-SIV department ciphertext has a valid authentication tag: <strong data-verdict="dte-tags" data-result="${tagVerdict.result}">${tagVerdict.text}</strong>. The query module holds no key, equality still succeeds, and frequency analysis recovers cells from public counts.</p></section>
     <details><summary>Method notes and limits</summary><p>BCLO uses exact hypergeometric splitting over an 8-bit plaintext to 16-bit ciphertext domain. Binary CLWW emits eight HMAC-derived trits; all pairwise comparisons reconstruct a radix tree. NKW cumulative matching aligns its bucket CDF to auxiliary data. The OPE sorting attack is complete for dense ages but incomplete for sparse salaries because order omits the gaps.</p></details>
     <footer class="scripture-footer"><p>So whether you eat or drink or whatever you do, do it all for the glory of God. — 1 Corinthians 10:31</p></footer>`
 
@@ -209,7 +250,7 @@ function render() {
     column = next
     recovered = new Map()
     revealed = false
-    status = `Selected ${columnName()} under ${schemeName()}. Previous recovery retired.`
+    status = retired()
     render()
   }))
   app.querySelectorAll<HTMLButtonElement>('[data-scheme]').forEach((button) => button.addEventListener('click', () => {
@@ -218,14 +259,14 @@ function render() {
     selectedScheme = next
     recovered = new Map()
     revealed = false
-    status = `Selected ${columnName()} under ${schemeName()}. Previous recovery retired.`
+    status = retired()
     render()
   }))
   app.querySelector<HTMLButtonElement>('#query')!.addEventListener('click', () => { void query() })
   app.querySelector<HTMLButtonElement>('#recover')!.addEventListener('click', recover)
   app.querySelector<HTMLButtonElement>('#reveal')!.addEventListener('click', () => { revealed = true; render() })
-  app.querySelector<HTMLSelectElement>('#row-count')!.addEventListener('change', async (event) => { rows = makeTable(Number((event.target as HTMLSelectElement).value)); table = await sealTableWithKey(rows, oreKey); sealed = table.rows; recovered = new Map(); revealed = false; status = 'Dataset reshuffled. Previous recovery retired.'; render() })
-  app.querySelector<HTMLSelectElement>('#population')!.addEventListener('change', (event) => { auxiliaryPopulation = (event.target as HTMLSelectElement).value as AuxiliaryPopulation; recovered = new Map(); revealed = false; status = 'Auxiliary population changed. Previous recovery retired.'; render() })
+  app.querySelector<HTMLSelectElement>('#row-count')!.addEventListener('change', async (event) => { rows = makeTable(Number((event.target as HTMLSelectElement).value)); table = await sealTableWithKey(rows, oreKey); sealed = table.rows; recovered = new Map(); revealed = false; status = { text: `Dataset reshuffled to ${rows.length} rows. Previous recovery retired.`, result: 'retired' }; render() })
+  app.querySelector<HTMLSelectElement>('#population')!.addEventListener('change', (event) => { auxiliaryPopulation = (event.target as HTMLSelectElement).value as AuxiliaryPopulation; recovered = new Map(); revealed = false; status = { text: `Auxiliary population changed to ${auxiliaryPopulation}. Previous recovery retired.`, result: 'retired' }; render() })
 }
 
 render()

@@ -49,7 +49,7 @@ npm run build
 npm run test:a11y
 ```
 
-The suite has 27 unit tests and 15 production-browser claim, verdict-coverage, and accessibility tests. Two known-answer tests reproduce the RFC 8452 AES-128 and AES-256 empty-plaintext vectors. The suite also checks the live leakage explanation, full sealed matrix and ciphertext-only query API, exhaustively checks all 65,536 CLWW comparisons, full-domain OPE monotonicity, exact hypergeometric support, dense-versus-sparse sorting behavior, grouped cumulative matching, pairwise MSDB tree reconstruction, malformed ciphertext rejection, per-session key material for all three schemes, attack-module isolation, randomized-control uniqueness, score arithmetic, retirement behavior, support-mismatch rejection, edge cases, arithmetic text contrast, non-text contrast, reflow, and WCAG 2.1 A/AA across desktop and mobile states.
+The suite has 27 unit tests and 18 production-browser claim, verdict-coverage, and accessibility tests. Two known-answer tests reproduce the RFC 8452 AES-128 and AES-256 empty-plaintext vectors. The suite also checks the live leakage explanation, full sealed matrix and ciphertext-only query API, exhaustively checks all 65,536 CLWW comparisons, full-domain OPE monotonicity, exact hypergeometric support, dense-versus-sparse sorting behavior, grouped cumulative matching, pairwise MSDB tree reconstruction, malformed ciphertext rejection, per-session key material for all three schemes, attack-module isolation, randomized-control uniqueness, score arithmetic, retirement behavior, support-mismatch rejection, edge cases, arithmetic text contrast, non-text contrast, reflow, and WCAG 2.1 A/AA across desktop and mobile states.
 
 ## Performance
 
@@ -63,15 +63,33 @@ The main demo uses 240-1,000 rows so each attack remains inspectable in a browse
 
 ## Rendered verdicts
 
-Every outcome the page renders carries a `data-verdict` marker, and each marker has a
-recorded §4.1c mutation in `e2e/verdict-mutations.ts` naming the edit that forces it
-false, the passing baseline from the same run, and the assertion that then failed.
+Every outcome the page renders carries a `data-verdict` marker and every rendered
+MEASUREMENT carries a `data-claim` one. Both families are held to the same rule: each
+marker has a recorded §4.1c mutation in `e2e/verdict-mutations.ts` naming the edit that
+forces it false, the passing baseline from the same run, and the assertion that then
+failed.
+
+A marker's words and its state are ONE claim. `e2e/expect-marker.ts` is the only way this
+lab asserts one: `expectVerdict` checks the text, the `data-result` and the pass/fail
+class in a single call, and `expectClaim` checks a measurement's text and its `data-value`
+together. The coverage job requires every recorded mutation to be asserted through those
+helpers -- a spec that merely mentions a marker id fails the build. The record carries the
+mutation that proves this is load-bearing: moving a per-row verdict's state while leaving
+its words alone is caught on `data-result` and the paint, with no text assertion failing
+at all.
 
 `npm run test:verdicts` derives coverage by walking the rendered page rather than from
 any hand-kept list. It fails if the page renders a marker with no recorded mutation, and
-separately if a verdict word or verdict styling is rendered outside a marker -- which is
-what catches a later contributor pasting in a raw banner. A third test proves that second
-check can fail, by adding exactly such a banner.
+separately if a verdict word, verdict styling, or an unmarked number is rendered outside a
+marker -- which is what catches a later contributor pasting in a raw banner, or painting a
+figure nothing asserts. A third test proves that second check can fail, by adding exactly
+such a banner and exactly such a number.
+
+The denominator for all of that is `driveEveryState`, which visits every option of every
+control that changes what renders: the column and scheme segments, the four row counts and
+the three public populations. That is not decoration -- the `sample-warning` verdict
+renders at exactly one row count, and before this walk existed it sat outside the set both
+coverage rules enumerate over, unmarked and unrecorded, with every check green.
 
 The job runs as its own required check and `deploy` needs it, so neither a merge nor a
 direct push to main can ship past it.
