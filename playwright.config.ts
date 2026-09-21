@@ -7,7 +7,7 @@ export default defineConfig({
   reporter: 'list',
   use: { baseURL: 'http://localhost:4201/crypto-lab-order-leak/', colorScheme: 'dark' },
   webServer: {
-    command: 'npm run build && npm run preview -- --port 4627 --strictPort',
+    command: 'npm run build && npm run preview -- --port 4201 --strictPort',
     url: 'http://localhost:4201/crypto-lab-order-leak/',
     reuseExistingServer: !process.env.CI,
   },
