@@ -3,3 +3,7 @@ dist/
 test-results/
 playwright-report/
 *.tsbuildinfo
+# Local working copy of the catalog master template — deliberately untracked.
+# A committed copy ages silently into a second, wrong standard (audits/kickoff.md).
+CRYPTO-LAB-TEMPLATE*.md
+_MASTER-TEMPLATE.md
