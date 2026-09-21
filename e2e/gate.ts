@@ -601,7 +601,7 @@ export async function driveAllStates(page: Page, theme: string): Promise<void> {
   await expect(page.getByText('Frequency matching aligned', { exact: false })).toBeVisible();
   await scanAt('department frequency recovery complete');
   await page.getByRole('button', { name: 'Reveal sealed truth' }).click();
-  await expect(page.locator('[data-score]')).toBeVisible();
+  await expect(page.locator('[data-verdict="recovery-score"]')).toBeVisible();
   await scanAt('department truth revealed and scored');
 
   await page.locator('#population').selectOption('shifted');
@@ -628,7 +628,7 @@ export async function driveAllStates(page: Page, theme: string): Promise<void> {
   await expect(page.getByText('Sorting attack aligned the dense', { exact: false })).toBeVisible();
   await scanAt('age sorting recovery complete');
   await page.getByRole('button', { name: 'Reveal sealed truth' }).click();
-  await expect(page.locator('[data-score]')).toBeVisible();
+  await expect(page.locator('[data-verdict="recovery-score"]')).toBeVisible();
   await scanAt('age truth revealed and scored');
 
   await page.getByRole('button', { name: 'Salary', exact: true }).click();
@@ -647,19 +647,20 @@ export async function driveAllStates(page: Page, theme: string): Promise<void> {
   await expect(page.getByText('Cumulative matching used', { exact: false })).toBeVisible();
   await scanAt('salary MSDB recovery complete');
   await page.getByRole('button', { name: 'Reveal sealed truth' }).click();
-  await expect(page.locator('[data-score]')).toBeVisible();
+  await expect(page.locator('[data-verdict="recovery-score"]')).toBeVisible();
   await scanAt('salary truth revealed and scored');
 
   await page.getByRole('button', { name: 'Randomized control' }).click();
   await expect(page.getByRole('button', { name: 'Randomized control' })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: 'Try a query' }).click();
-  await expect(page.getByText('Cannot sort ciphertexts', { exact: false })).toBeVisible();
-  await scanAt('randomized control query rejected');
+  // The control is measured, not exempted: the query really runs against it.
+  await expect(page.getByText('matched 0 of 240 sealed rows', { exact: false })).toBeVisible();
+  await scanAt('randomized control query returns no rows');
   await page.getByRole('button', { name: 'Run recovery' }).click();
-  await expect(page.getByText('NOTHING RECOVERED', { exact: false })).toBeVisible();
-  await scanAt('randomized control recovery finds no relation');
+  await expect(page.getByText('240 ciphertext buckets, largest 1', { exact: false })).toBeVisible();
+  await scanAt('randomized control recovery finds no reusable bucket');
   await page.getByRole('button', { name: 'Reveal sealed truth' }).click();
-  await expect(page.locator('[data-score]')).toHaveText('NOTHING RECOVERED');
+  await expect(page.locator('[data-verdict="recovery-score"]')).toHaveText('NOTHING RECOVERED · 240 of 240 AMBIGUOUS');
   await scanAt('randomized control truth revealed');
 
   await page.locator('#row-count').selectOption('24');

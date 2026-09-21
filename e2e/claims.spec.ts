@@ -6,7 +6,7 @@ test('OPE sorting recovers dense age but fails explicitly on sparse salary', asy
   await page.getByRole('button', { name: 'Order-preserving (OPE)', exact: true }).click()
   await page.getByRole('button', { name: 'Run recovery' }).click()
   await page.getByRole('button', { name: 'Reveal sealed truth' }).click()
-  const verdict = await page.locator('[data-score]').textContent()
+  const verdict = await page.locator('[data-verdict="recovery-score"]').textContent()
   const counts = verdict!.match(/(\d+) MATCHED · (\d+) MISMATCHED · (\d+) AMBIGUOUS/)!.slice(1).map(Number)
   expect(counts.reduce((sum, count) => sum + count, 0)).toBe(240)
   expect(counts).toEqual([240, 0, 0])
@@ -40,15 +40,26 @@ test('tiny datasets warn and hidden content stays unpainted', async ({ page }) =
   await expect(page.locator('#hidden-probe')).toBeHidden()
 })
 
-test('the randomized control cannot query or recover values', async ({ page }) => {
+test('the randomized control survives a query and a recovery that both really run', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Randomized control' }).click()
+
+  // The query is executed against the control column, not skipped. Both numbers
+  // are measurements: a fresh encryption of the search value matches nothing,
+  // and every stored ciphertext is distinct.
   await page.getByRole('button', { name: 'Try a query' }).click()
-  await expect(page.getByRole('status')).toContainText('Cannot sort ciphertexts')
+  await expect(page.getByRole('status')).toContainText('matched 0 of 240 sealed rows')
+  await expect(page.getByRole('status')).toContainText('240 of 240 stored ciphertexts are distinct')
+
+  // The frequency attack is executed against the control column too, and is
+  // defeated by bucket sizes rather than by an early return.
   await page.getByRole('button', { name: 'Run recovery' }).click()
+  await expect(page.getByRole('status')).toContainText('240 ciphertext buckets, largest 1')
+  await expect(page.getByRole('status')).toContainText('No bucket holds more than one row')
+
   await page.getByRole('button', { name: 'Reveal sealed truth' }).click()
-  await expect(page.locator('[data-score]')).toHaveAttribute('data-score', '0/240')
-  await expect(page.getByText('NOTHING RECOVERED', { exact: true })).toBeVisible()
+  await expect(page.locator('[data-verdict="recovery-score"]')).toHaveAttribute('data-score', '0/240')
+  await expect(page.locator('[data-verdict="recovery-score"]')).toHaveText('NOTHING RECOVERED · 240 of 240 AMBIGUOUS')
 })
 
 test('authenticated deterministic ciphertexts can still be recovered', async ({ page }) => {
@@ -59,7 +70,7 @@ test('authenticated deterministic ciphertexts can still be recovered', async ({ 
   await page.getByRole('button', { name: 'Run query on ciphertexts' }).click()
   await page.getByRole('button', { name: 'Run recovery' }).click()
   await page.getByRole('button', { name: 'Reveal sealed truth' }).click()
-  await expect(page.locator('[data-score]')).not.toHaveAttribute('data-score', '0/240')
+  await expect(page.locator('[data-verdict="recovery-score"]')).not.toHaveAttribute('data-score', '0/240')
 })
 
 test('pairwise MSDB tree and cumulative matching recover salary but shifted statistics degrade it', async ({ page }) => {
@@ -69,12 +80,12 @@ test('pairwise MSDB tree and cumulative matching recover salary but shifted stat
   await page.getByRole('button', { name: 'Run recovery' }).click()
   await expect(page.getByRole('status')).toContainText('28,680 pairwise CLWW comparisons')
   await page.getByRole('button', { name: 'Reveal sealed truth' }).click()
-  await expect(page.locator('[data-score]')).toHaveAttribute('data-score', '240/240')
+  await expect(page.locator('[data-verdict="recovery-score"]')).toHaveAttribute('data-score', '240/240')
 
   await page.getByLabel('Public population').selectOption('shifted')
   await page.getByRole('button', { name: 'Run recovery' }).click()
   await page.getByRole('button', { name: 'Reveal sealed truth' }).click()
-  await expect(page.locator('[data-score]')).not.toHaveAttribute('data-score', '240/240')
+  await expect(page.locator('[data-verdict="recovery-score"]')).not.toHaveAttribute('data-score', '240/240')
 })
 
 test('mismatched auxiliary support is named and recovery fails closed', async ({ page }) => {
@@ -95,7 +106,7 @@ test('every column is interactive under DTE, OPE, ORE, and randomized control', 
       { name: 'Deterministic (DTE)', status: 'Equality query' },
       { name: 'Order-preserving (OPE)', status: 'Range query' },
       { name: 'Order-revealing (ORE)', status: 'Range query' },
-      { name: 'Randomized control', status: 'Cannot sort ciphertexts' },
+      { name: 'Randomized control', status: 'matched 0 of 240 sealed rows' },
     ]) {
       await page.getByRole('button', { name: scheme.name, exact: true }).click()
       await page.getByRole('button', { name: scheme.name, exact: true }).evaluate((button) => {
@@ -115,5 +126,24 @@ test('the live tradeoff explains that the database feature is also the attacker 
   await expect(ledger).toContainText('Count repeated ciphertexts')
 
   await page.getByRole('button', { name: 'Randomized control', exact: true }).click()
-  await expect(page.getByRole('region', { name: 'Department under AES-GCM randomized control' })).toContainText('recovery stays at zero')
+  await expect(page.getByRole('region', { name: 'Department under AES-GCM randomized control' })).toContainText('No stable pattern remains for a count or a rank to match')
+})
+test('per-row verdicts follow the guess against the sealed truth', async ({ page }) => {
+  await page.goto('/')
+  const rowVerdicts = page.locator('[data-verdict="row-outcome"]')
+
+  // Dense age under OPE: every visible row is recovered and says so.
+  await page.getByRole('button', { name: 'Age', exact: true }).click()
+  await page.getByRole('button', { name: 'Order-preserving (OPE)', exact: true }).click()
+  await page.getByRole('button', { name: 'Run recovery' }).click()
+  await page.getByRole('button', { name: 'Reveal sealed truth' }).click()
+  await expect(page.locator('[data-verdict="recovery-score"]')).toHaveAttribute('data-score', '240/240')
+  expect(await rowVerdicts.allTextContents()).toEqual(Array(18).fill('! RECOVERED'))
+
+  // Randomized control: the same attack runs and every row stays ambiguous.
+  await page.getByRole('button', { name: 'Randomized control', exact: true }).click()
+  await page.getByRole('button', { name: 'Run recovery' }).click()
+  await page.getByRole('button', { name: 'Reveal sealed truth' }).click()
+  await expect(page.locator('[data-verdict="recovery-score"]')).toHaveAttribute('data-score', '0/240')
+  expect(await rowVerdicts.allTextContents()).toEqual(Array(18).fill('? AMBIGUOUS'))
 })
