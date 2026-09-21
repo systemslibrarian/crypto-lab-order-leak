@@ -8,7 +8,7 @@ Order Leak is a browser-only teaching demo of deterministic AES-GCM-SIV, an exac
 
 1. The DBA view runs equality, range, and sorting queries on sealed values.
 2. The attacker view receives only ciphertext observations and separately generated synthetic public data, then performs frequency matching, sorting, NKW cumulative matching, and pairwise MSDB-tree recovery.
-3. Reveal scores every recovered cell against separately held truth; the randomized AES-GCM control recovers nothing.
+3. Reveal scores every recovered cell against separately held truth. The randomized AES-GCM control is put through the same equality query and the same frequency attack as the leaky schemes, and the page reports what they returned: 0 of 240 rows matched, 240 of 240 ciphertexts distinct, largest bucket 1.
 4. The authentication fixture verifies every AES-GCM-SIV tag while showing that authentication does not hide equality leakage.
 5. Matching and shifted auxiliary populations show how inference quality depends on public-data fit; a 24-row option warns that tiny samples are unstable.
 
@@ -24,7 +24,7 @@ Choose any of the three columns, switch independently among DTE, OPE, ORE, and r
 
 ## What Can Go Wrong
 
-Frequency ties are labelled ambiguous rather than guessed. Sorting is complete only for a dense column whose auxiliary distribution matches. Values outside the 8-bit OPE teaching domain are rejected. The randomized AES-GCM control uses a fresh 96-bit nonce for every row and intentionally cannot support equality or order queries.
+Frequency ties are labelled ambiguous rather than guessed. Sorting is complete only for a dense column whose auxiliary distribution matches. Values outside the 8-bit OPE teaching domain are rejected. The randomized AES-GCM control uses a fresh 96-bit nonce for every row. It is not exempted from the attacks: the query and the recovery both run against it, and the verdict is computed from the bucket sizes they measure rather than asserted from the scheme name.
 
 ## Real-World Usage
 
@@ -49,7 +49,7 @@ npm run build
 npm run test:a11y
 ```
 
-The suite has 25 unit tests and 11 production-browser claim/accessibility tests. Two known-answer tests reproduce the RFC 8452 AES-128 and AES-256 empty-plaintext vectors. The suite also checks the live leakage explanation, full sealed matrix and ciphertext-only query API, exhaustively checks all 65,536 CLWW comparisons, full-domain OPE monotonicity, exact hypergeometric support, dense-versus-sparse sorting behavior, grouped cumulative matching, pairwise MSDB tree reconstruction, malformed ciphertext rejection, per-session key material for all three schemes, attack-module isolation, randomized-control uniqueness, score arithmetic, retirement behavior, support-mismatch rejection, edge cases, arithmetic text contrast, non-text contrast, reflow, and WCAG 2.1 A/AA across desktop and mobile states.
+The suite has 27 unit tests and 15 production-browser claim, verdict-coverage, and accessibility tests. Two known-answer tests reproduce the RFC 8452 AES-128 and AES-256 empty-plaintext vectors. The suite also checks the live leakage explanation, full sealed matrix and ciphertext-only query API, exhaustively checks all 65,536 CLWW comparisons, full-domain OPE monotonicity, exact hypergeometric support, dense-versus-sparse sorting behavior, grouped cumulative matching, pairwise MSDB tree reconstruction, malformed ciphertext rejection, per-session key material for all three schemes, attack-module isolation, randomized-control uniqueness, score arithmetic, retirement behavior, support-mismatch rejection, edge cases, arithmetic text contrast, non-text contrast, reflow, and WCAG 2.1 A/AA across desktop and mobile states.
 
 ## Performance
 
@@ -60,3 +60,19 @@ The main demo uses 240-1,000 rows so each attack remains inspectable in a browse
 *One of the browser demos in the [Crypto Lab](https://crypto-lab.systemslibrarian.dev/) suite.*
 
 *"So whether you eat or drink or whatever you do, do it all for the glory of God." — 1 Corinthians 10:31*
+
+## Rendered verdicts
+
+Every outcome the page renders carries a `data-verdict` marker, and each marker has a
+recorded §4.1c mutation in `e2e/verdict-mutations.ts` naming the edit that forces it
+false, the passing baseline from the same run, and the assertion that then failed.
+
+`npm run test:verdicts` derives coverage by walking the rendered page rather than from
+any hand-kept list. It fails if the page renders a marker with no recorded mutation, and
+separately if a verdict word or verdict styling is rendered outside a marker -- which is
+what catches a later contributor pasting in a raw banner. A third test proves that second
+check can fail, by adding exactly such a banner.
+
+The job runs as its own required check and `deploy` needs it, so neither a merge nor a
+direct push to main can ship past it.
+

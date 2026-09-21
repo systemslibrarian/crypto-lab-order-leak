@@ -28,9 +28,18 @@ export function makeTable(size = 240): Person[] {
   }))
 }
 
-export async function sealTable(rows: Person[], oreKey: Uint8Array): Promise<SealedRow[]> {
+export type SealedTable = { rows: SealedRow[]; controlKey: CryptoKey }
+
+/**
+ * Seal the table and hand back the control key with it.
+ *
+ * The key has to escape. Without it the page cannot encrypt a query token for
+ * the randomized column, and the control exhibit degenerates into a literal
+ * string claiming the query failed -- which is what it used to be.
+ */
+export async function sealTableWithKey(rows: Person[], oreKey: Uint8Array): Promise<SealedTable> {
   const controlKey = await createControlKey()
-  return Promise.all(rows.map(async (row) => {
+  const sealed = await Promise.all(rows.map(async (row) => {
     const sealCell = async (column: DataColumn, value: string | number): Promise<SealedCell> => {
       const encoded = encodeColumnValue(column, value)
       return {
@@ -47,4 +56,9 @@ export async function sealTable(rows: Person[], oreKey: Uint8Array): Promise<Sea
       salary: await sealCell('salary', row.salary),
     }
   }))
+  return { rows: sealed, controlKey }
+}
+
+export async function sealTable(rows: Person[], oreKey: Uint8Array): Promise<SealedRow[]> {
+  return (await sealTableWithKey(rows, oreKey)).rows
 }
