@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { expect, test, type Page } from '@playwright/test'
+import { claimValues, expectClaim, expectEveryClaim } from './expect-marker'
+import { observedPairs, pairKey } from './marker-observations'
 import { COVERED_CLAIMS, COVERED_VERDICTS, MARKER_MUTATIONS } from './verdict-mutations'
 
 /**
@@ -18,11 +20,14 @@ import { COVERED_CLAIMS, COVERED_VERDICTS, MARKER_MUTATIONS } from './verdict-mu
  *   3. no verdict word, no verdict styling and no unmarked measurement is
  *      rendered outside a marker -- which catches a later contributor pasting
  *      in a raw banner, or painting a number nothing is asserting (Fix 3);
- *   4. every recorded mutation's marker is asserted through `expectVerdict` /
- *      `expectClaim`, so text and state are checked as one claim (Fix 1). A
- *      spec that merely MENTIONS the id no longer counts.
+ *   4. every recorded mutation's marker was asserted through `expectVerdict` /
+ *      `expectClaim` AT RUNTIME, by the test the record names, so text and
+ *      state are checked as one claim (Fix 1) and the check is over what ran
+ *      rather than over what the source says ran (D6). Two further rules serve
+ *      it: `claims.spec.ts` may not read page content by any route but
+ *      `expect-marker.ts`, and a helper handed the page's own answer throws.
  *
- * The last two tests prove checks 3 and 4 can actually fail.
+ * Three tests prove checks 3 and 4 can actually fail.
  *
  * The denominator for checks 1-3 is `driveEveryState`, and brief Fix 6 makes
  * that the load-bearing part: it visits **every option of every control that
@@ -239,21 +244,116 @@ test('the outside-marker check catches a raw unmarked banner and a raw unmarked 
   expect(offenders.some((offender) => offender.includes('28,680 pairwise comparisons'))).toBe(true)
 })
 
-test('every recorded mutation is asserted through the text-and-state helper', () => {
-  const specSource = readFileSync(fileURLToPath(new URL('./claims.spec.ts', import.meta.url)), 'utf8')
-  const helper = { verdict: '(?:expectVerdict|expectEveryVerdict)', claim: '(?:expectClaim|expectEveryClaim)' }
-
-  const unasserted = MARKER_MUTATIONS.filter((entry) => {
-    const call = new RegExp(`${helper[entry.kind]}\\(\\s*page,\\s*'${entry.marker}'`)
-    return !call.test(specSource)
-  }).map((entry) => `${entry.kind}:${entry.marker}`)
+/**
+ * Brief decision D6: a mention is still not an assertion, one level down.
+ *
+ * What stood here until now matched `expectVerdict(page, '<id>'` as SOURCE
+ * TEXT across `claims.spec.ts`, and enforced that a string is present rather
+ * than that an assertion ran. Three auditors defeated that shape three ways
+ * across the fleet, and this lab's own escape was the middle one:
+ *
+ *   - comment the call out, and the text still matches;
+ *   - keep the call and feed it `values: await claimValues(page, ...)`, and it
+ *     runs but compares the page to itself -- the recorded `public-value`
+ *     mutation shipped the attacker's histogram as ["0","1","2","3"] with this
+ *     rule green at 16 passed;
+ *   - satisfy the FILE-granular match from an unrelated line in another test,
+ *     and the killing assertion can be rewritten to anything.
+ *
+ * So the denominator comes from what RAN. `expect-marker.ts` appends its
+ * `(test title, marker)` pair to a run-scoped sink after each assertion
+ * passes, and every mutation record names the test whose assertion killed it.
+ * A commented-out call executes nothing; a call in another test records
+ * another pair; a tautological call throws before it can record anything.
+ *
+ * This test runs in its own Playwright project, which `dependencies: ['claims']`
+ * puts AFTER the whole claims project, because the pairs do not exist until
+ * those tests have run -- and they run in separate worker processes, so a
+ * module-level Set would aggregate nothing.
+ */
+test('every recorded mutation was asserted at RUNTIME, by the test its record names', () => {
+  const { pairs, tests, lines } = observedPairs()
 
   expect(
-    unasserted,
-    'these markers have a recorded mutation but claims.spec.ts never asserts them through expectVerdict/expectClaim, ' +
-      `so their text could be flipped while data-result and the pass/fail class go on claiming the opposite: ${unasserted.join(', ')}`,
+    lines,
+    'no marker assertion was observed at all. This check reads what `claims.spec.ts` actually executed, so it ' +
+      'is only meaningful when that project has run: use `npm run test:verdicts` (or `--project=verdict-coverage`, ' +
+      'which pulls the claims project in as a dependency) rather than naming this file directly.',
+  ).toBeGreaterThan(0)
+
+  const unobserved = MARKER_MUTATIONS.filter((entry) => !pairs.has(pairKey(entry.killedByTest, entry.kind, entry.marker))).map(
+    (entry) =>
+      `${entry.kind}:${entry.marker} -- record names "${entry.killedByTest}", which ${
+        tests.has(entry.killedByTest) ? 'RAN but never asserted this marker through the helper' : 'asserted nothing / never ran'
+      }`,
+  )
+
+  expect(
+    unobserved,
+    'these recorded mutations name a killing assertion that did not happen. Nothing in the run went through ' +
+      `expectVerdict/expectClaim for that marker in that test, so the record is evidence about a check nobody made:\n  ${unobserved.join('\n  ')}`,
   ).toEqual([])
 
-  // Prove this check can fail: a marker nothing asserts must not satisfy it.
-  expect(new RegExp(`${helper.verdict}\\(\\s*page,\\s*'no-such-marker'`).test(specSource)).toBe(false)
+  // Prove this check can fail: a pair nothing executed must not be observed.
+  expect(pairs.has(pairKey('no such test', 'verdict', 'no-such-marker'))).toBe(false)
+})
+
+/**
+ * The bypass guard for the tautology rule, and it is a source scan on purpose.
+ *
+ * `expect-marker.ts` refuses an expectation that came back from one of ITS read
+ * helpers, which is a runtime rule and the real one. It cannot see a value the
+ * spec reads by some other route -- `locator.textContent()`,
+ * `getAttribute('data-value')`, an `evaluateAll` of its own -- because
+ * Playwright exposes no hook that would make those observable. This closes that
+ * route by requiring the spec to contain none of them, which leaves
+ * `expect-marker.ts` as the only way `claims.spec.ts` can learn what the page
+ * says. It is a bypass guard sitting on top of a runtime rule, never the rule.
+ */
+test('claims.spec.ts learns what the page says only through expect-marker.ts', () => {
+  const specSource = readFileSync(fileURLToPath(new URL('./claims.spec.ts', import.meta.url)), 'utf8')
+  const readCalls = [
+    '.textContent(',
+    '.allTextContents(',
+    '.allInnerTexts(',
+    '.innerText(',
+    '.innerHTML',
+    '.getAttribute(',
+    '.inputValue(',
+    '.evaluateAll(',
+    '= await page.evaluate(',
+    '=await page.evaluate(',
+  ]
+  const found = readCalls.filter((call) => specSource.includes(call))
+  expect(
+    found,
+    'claims.spec.ts reads page content directly. An expectation obtained that way is outside the tautology check ' +
+      `in expect-marker.ts, so it can be handed straight back to a helper as its own oracle: ${found.join(', ')}`,
+  ).toEqual([])
+
+  // Prove this check can fail: the banned spellings are the ones searched for.
+  expect(readCalls.some((call) => `${specSource}\nawait locator.textContent()`.includes(call))).toBe(true)
+})
+
+test("a helper fed the page's own answer refuses to assert it", async ({ page }) => {
+  await page.goto('/')
+  const read = await claimValues(page, 'public-value')
+  expect(read.length, 'nothing was read, so nothing is being refused').toBeGreaterThan(0)
+
+  // This lab's Fix 1 escape, executed: keep the helper call, feed it what the
+  // page just said. It passed for any page, including one whose auxiliary
+  // histogram had lost every label.
+  await expect(expectEveryClaim(page, 'public-value', { values: read })).rejects.toThrow(
+    /was handed an expectation that a read helper returned/,
+  )
+
+  // A copy is refused too: the check is on content as well as identity, so
+  // `[...values]`, `.slice()` and `.map(String)` do not launder it.
+  await expect(expectEveryClaim(page, 'public-value', { values: [...read] })).rejects.toThrow(
+    /equal to what this test already read from it/,
+  )
+
+  // An expectation the spec derives still asserts normally -- a rule that
+  // refused everything would pass the two checks above and protect nothing.
+  await expectClaim(page, 'row-id', { value: '1', nth: 0 })
 })

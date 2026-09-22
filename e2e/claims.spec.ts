@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import {
-  claimValues,
+  equalityPattern,
   expectClaim,
   expectEveryClaim,
   expectEveryVerdict,
@@ -12,8 +12,17 @@ import {
 /**
  * Every rendered marker is asserted here through `expectVerdict` /
  * `expectClaim`, which check the words and the state as ONE claim. The
- * coverage gate enforces that: a marker with a recorded mutation that this file
- * only mentions, or only text-matches, fails the build.
+ * coverage gate enforces that at RUNTIME (brief decision D6): each helper
+ * records the `(test title, marker)` pair it actually executed, and
+ * `verdict-coverage.spec.ts` requires every recorded mutation's pair to have
+ * been observed. A call that is commented out, or that lives in some other
+ * test, satisfies nothing.
+ *
+ * Nothing in this file reads a marker's value off the page. That is a rule, not
+ * a habit: an expectation read from the page under test compares the page to
+ * itself, which is how this lab's Fix 1 escape worked, and both
+ * `expect-marker.ts` (at runtime) and `verdict-coverage.spec.ts` (over this
+ * file's source) now refuse it.
  *
  * The oracles derive their expected totals from the row count the page is
  * actually running (`rowCount(page)`) and from stand-in counters written here.
@@ -41,13 +50,8 @@ const shownDepartments = (rows: number) =>
   Array.from({ length: shownRows(rows) }, (_, index) => DEPARTMENT_CYCLE[index % DEPARTMENT_CYCLE.length])
 const shownAges = (rows: number) => Array.from({ length: shownRows(rows) }, (_, index) => 20 + (index % 46))
 
-/** Which positions hold equal values, as an index pattern. Equal plaintexts must
- *  produce the same pattern in the ciphertext column under DTE, and must NOT
- *  under the randomized control. */
-const equalityPattern = (values: string[]) => {
-  const first = [...new Set(values)]
-  return values.map((value) => first.indexOf(value))
-}
+/** A column with no repeated value has this equality pattern and no other. */
+const allDistinct = (count: number) => Array.from({ length: count }, (_, index) => index)
 
 async function selectRows(page: Page, rows: number) {
   await page.locator('#row-count').selectOption(String(rows))
@@ -118,45 +122,68 @@ test('tiny datasets warn, the warning names the sample it judges, and hidden con
 })
 
 test('the randomized control survives a query and a recovery that both really run', async ({ page }) => {
+  test.setTimeout(120_000)
   await page.goto('/')
-  const rows = await rowCount(page)
   await page.getByRole('button', { name: 'Randomized control' }).click()
 
-  // The query is executed against the control column, not skipped. Both numbers
-  // are measurements: a fresh encryption of the search value matches nothing,
-  // and every stored ciphertext is distinct.
-  await page.getByRole('button', { name: 'Try a query' }).click()
-  await expectVerdict(page, 'run-status', {
-    text: new RegExp(
-      `^Equality query for Finance matched 0 of ${rows} sealed rows\\..*${rows} of ${rows} stored ciphertexts are distinct`,
-    ),
-    result: 'control-held',
-    className: 'status neutral',
-  })
+  // Run the control at the default row count AND at the largest the UI offers.
+  // Every aggregate in its two sentences is derived here from the row count the
+  // page is actually running, so no literal in the page can be right at both.
+  //
+  // Brief Fix 4, this lab's instance: the ORE comparison count was already
+  // derived as n(n-1)/2 and already run at two counts, but the control's
+  // aggregates had exactly one oracle and it ran at the default only. A page
+  // holding the literals `240 of 240` and `240 rows into 240 ... largest 1`
+  // rendered "matched 0 of 1000 sealed rows ... and 240 of 240 stored
+  // ciphertexts are distinct" -- 1000 and 240 in one sentence -- with all
+  // sixteen tests green.
+  //
+  // `largest 1` is the one figure here that is constant across every row count
+  // by construction, and it is not asserted on its own credit: a control whose
+  // largest bucket exceeded one would have fewer distinct ciphertexts than
+  // rows, which the bucket count in the same sentence forbids. Hard-coding
+  // both is what the second row count kills.
+  for (const target of [240, 1000]) {
+    if (target !== (await rowCount(page))) await selectRows(page, target)
+    const rows = await rowCount(page)
+    const shown = shownRows(rows)
 
-  // Every ciphertext the panel renders is distinct too, so the leak the DTE
-  // column shows in these very cells is absent here.
-  const controlCiphers = await claimValues(page, 'sealed-cipher')
-  expect(controlCiphers).toHaveLength(shownRows(rows))
-  expect(new Set(controlCiphers).size).toBe(shownRows(rows))
+    // The query is executed against the control column, not skipped. Both
+    // numbers are measurements: a fresh encryption of the search value matches
+    // nothing, and every stored ciphertext is distinct.
+    await page.getByRole('button', { name: 'Try a query' }).click()
+    await expectVerdict(page, 'run-status', {
+      text: new RegExp(
+        `^Equality query for Finance matched 0 of ${rows} sealed rows\\..*${rows} of ${rows} stored ciphertexts are distinct`,
+      ),
+      result: 'control-held',
+      className: 'status neutral',
+    })
 
-  // The frequency attack is executed against the control column too, and is
-  // defeated by bucket sizes rather than by an early return.
-  await page.getByRole('button', { name: 'Run recovery' }).click()
-  await expectVerdict(page, 'run-status', {
-    text: new RegExp(`^Frequency matching grouped ${rows} rows into ${rows} ciphertext buckets, largest 1\\. No bucket holds more than one row`),
-    result: 'control-held',
-    className: 'status neutral',
-  })
+    // Every ciphertext the panel renders is distinct too, so the leak the DTE
+    // column shows in these very cells is absent here.
+    await expectEveryClaim(page, 'sealed-cipher', { count: shown, pattern: allDistinct(shown) })
 
-  await page.getByRole('button', { name: 'Reveal sealed truth' }).click()
-  await expect(page.locator('[data-verdict="recovery-score"]')).toHaveAttribute('data-score', `0/${rows}`)
-  await expectVerdict(page, 'recovery-score', {
-    text: `NOTHING RECOVERED · ${rows} of ${rows} AMBIGUOUS`,
-    result: 'none',
-    className: 'control-ok',
-  })
-  await expectEveryClaim(page, 'attack-guess', { values: Array(shownRows(rows)).fill('ambiguous') })
+    // The frequency attack is executed against the control column too, and is
+    // defeated by bucket sizes rather than by an early return.
+    await page.getByRole('button', { name: 'Run recovery' }).click()
+    await expectVerdict(page, 'run-status', {
+      text: new RegExp(
+        `^Frequency matching grouped ${rows} rows into ${rows} ciphertext buckets, largest 1\\. No bucket holds more than one row`,
+      ),
+      result: 'control-held',
+      className: 'status neutral',
+    })
+
+    await page.getByRole('button', { name: 'Reveal sealed truth' }).click()
+    await expect(page.locator('[data-verdict="recovery-score"]')).toHaveAttribute('data-score', `0/${rows}`)
+    await expectVerdict(page, 'recovery-score', {
+      text: `NOTHING RECOVERED · ${rows} of ${rows} AMBIGUOUS`,
+      result: 'none',
+      className: 'control-ok',
+    })
+    await expectEveryClaim(page, 'attack-guess', { values: Array(shown).fill('ambiguous') })
+  }
 })
 
 test('authenticated deterministic ciphertexts can still be recovered', async ({ page }) => {
@@ -181,17 +208,25 @@ test('the sealed column shows the equality leak under DTE and the two panels sta
   const ids = Array.from({ length: shown }, (_, index) => String(index + 1))
   await expectEveryClaim(page, 'row-id', { values: [...ids, ...ids] })
 
-  // The rendered ciphertext agrees with the value the page reports for it, and
-  // the equality pattern of the sealed column reproduces the equality pattern
-  // of the plaintexts exactly. That IS the leak; the content oracle is the
-  // pattern, derived from this file's own stand-in table.
-  const ciphers = await claimValues(page, 'sealed-cipher')
-  await expectEveryClaim(page, 'sealed-cipher', { values: ciphers })
-  expect(ciphers).toHaveLength(shown)
-  expect(equalityPattern(ciphers)).toEqual(equalityPattern(shownDepartments(rows)))
-  expect(new Set(ciphers).size).toBe(new Set(shownDepartments(rows)).size)
-  expect(new Set(ciphers).size).toBeLessThan(shown)
-  expect(ciphers).not.toContain('Support')
+  // The equality pattern of the sealed column reproduces the equality pattern
+  // of the plaintexts exactly. That IS the leak, and the pattern is derived
+  // from this file's own stand-in table, never read off the page.
+  //
+  // It is asserted INSIDE the helper on purpose. The shape this replaces read
+  // the ciphertexts with `claimValues`, handed them straight back to
+  // `expectEveryClaim` as their own expectation -- which holds for any page --
+  // and left the real oracle on a bare `expect(equalityPattern(...))` beside
+  // it, so the recorded kill for `sealed-cipher` never reached the helper at
+  // all. Pattern equality also subsumes the distinct-count checks that used to
+  // sit on that bare `expect`: fewer distinct ciphertexts than rows, and
+  // exactly as many as there are distinct plaintexts, are both read straight
+  // off the pattern.
+  const plaintexts = shownDepartments(rows)
+  await expectEveryClaim(page, 'sealed-cipher', {
+    count: shown,
+    pattern: equalityPattern(plaintexts),
+    excludes: [...new Set(plaintexts)],
+  })
 })
 
 test("the public histogram is the attacker's auxiliary table and it totals the sealed rows", async ({ page }) => {
@@ -200,9 +235,7 @@ test("the public histogram is the attacker's auxiliary table and it totals the s
     if (rows !== (await rowCount(page))) await selectRows(page, rows)
     const expected = expectedDepartmentHistogram(rows)
     await expectEveryClaim(page, 'public-value', { values: expected.labels })
-    await expectEveryClaim(page, 'public-count', { values: expected.counts.map(String) })
-    const counts = (await claimValues(page, 'public-count')).map(Number)
-    expect(counts.reduce((sum, count) => sum + count, 0), 'the auxiliary table covers every sealed row').toBe(rows)
+    await expectEveryClaim(page, 'public-count', { values: expected.counts.map(String), sumsTo: rows })
   }
 })
 
@@ -264,10 +297,9 @@ test('every column is interactive under DTE, OPE, ORE, and randomized control', 
       { name: 'Order-revealing (ORE)', status: 'Range query' },
       { name: 'Randomized control', status: `matched 0 of ${rows} sealed rows` },
     ]) {
-      await page.getByRole('button', { name: scheme.name, exact: true }).click()
-      await page.getByRole('button', { name: scheme.name, exact: true }).evaluate((button) => {
-        if (button.getAttribute('aria-pressed') !== 'true') throw new Error('Matrix position was not selected.')
-      })
+      const choice = page.getByRole('button', { name: scheme.name, exact: true })
+      await choice.click()
+      await expect(choice, 'the matrix position was not selected').toHaveAttribute('aria-pressed', 'true')
       await page.getByRole('button', { name: scheme.name === 'Randomized control' ? 'Try a query' : 'Run query on ciphertexts' }).click()
       await expect(page.locator('[data-verdict="run-status"]')).toContainText(scheme.status)
     }
