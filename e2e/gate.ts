@@ -606,7 +606,7 @@ export async function driveAllStates(page: Page, theme: string): Promise<void> {
 
   await page.locator('#population').selectOption('shifted');
   await expect(page.locator('#population')).toHaveValue('shifted');
-  await expect(page.getByText('Auxiliary population changed. Previous recovery retired.')).toBeVisible();
+  await expect(page.getByText('Auxiliary population changed to shifted. Previous recovery retired.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Reveal sealed truth' })).toBeDisabled();
   await scanAt('shifted public population retires the department recovery');
   await page.locator('#population').selectOption('mismatch');
