@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:a11y": "playwright test",
-    "test:verdicts": "playwright test e2e/verdict-coverage.spec.ts"
+    "test:verdicts": "playwright test --project=verdict-coverage"
   },
   "dependencies": {
     "@noble/ciphers": "^2.1.1",
