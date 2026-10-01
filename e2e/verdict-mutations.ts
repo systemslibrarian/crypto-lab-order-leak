@@ -53,11 +53,29 @@ export type MarkerMutation = {
   baseline: string
   /** the assertion that failed, verbatim. */
   killedBy: string
+  /**
+   * The same edit as `mutation` above, as something a script can apply: one or
+   * more { file, find, replace } steps, applied in order and reversed last-first.
+   * It is a LIST because two records need more than one edit -- [1] replaces an
+   * interpolated aggregate in both query() and recover(), and [7] has to take the
+   * map callback's index before it can render it. The prose stays because it says
+   * which function the edit sits in and why that edit was chosen, neither of which
+   * survives compression into find/replace, and scripts/mutation.mjs refuses to run
+   * a record that carries only the prose.
+   */
+  edits: ReadonlyArray<{ file: string; find: string; replace: string }>
 }
 
 export const MARKER_MUTATIONS: MarkerMutation[] = [
   {
     kind: 'verdict',
+    edits: [
+      {
+        file: "src/ppe/control.ts",
+        find: "const nonce = crypto.getRandomValues(new Uint8Array(12))",
+        replace: "const nonce = new Uint8Array(12)",
+      },
+    ],
     marker: 'run-status',
     computedBy:
       'src/app.ts query()/recover(): every branch interpolates a value measured from the sealed column -- matched rows, distinct ciphertexts, bucket sizes, pairwise CLWW comparisons -- or reports the thrown auxiliary-support error, and picks its `result` state in the same expression. The randomized-control branch runs the same equality query and the same frequency attack as the leaky schemes instead of returning a literal.',
@@ -71,6 +89,18 @@ export const MARKER_MUTATIONS: MarkerMutation[] = [
   },
   {
     kind: 'verdict',
+    edits: [
+      {
+        file: "src/app.ts",
+        find: "and ${classes.distinct} of ${sealed.length} stored ciphertexts are distinct",
+        replace: "and 240 of 240 stored ciphertexts are distinct",
+      },
+      {
+        file: "src/app.ts",
+        find: "grouped ${observations.length} rows into ${classes.distinct} ciphertext buckets, largest ${classes.largest}",
+        replace: "grouped 240 rows into 240 ciphertext buckets, largest 1",
+      },
+    ],
     marker: 'run-status',
     computedBy:
       'src/app.ts query()/recover(), the randomized-control branches: `classes.distinct`, `sealed.length`, `observations.length` and `classes.largest` are all measured from the sealed column at the row count the page is running. This second record exists because measuring them and printing the numbers they happen to produce at the default are observationally identical until the page is run at a second row count (brief Fix 4).',
@@ -84,6 +114,13 @@ export const MARKER_MUTATIONS: MarkerMutation[] = [
   },
   {
     kind: 'verdict',
+    edits: [
+      {
+        file: "src/attack/sorting.ts",
+        find: "[...observations].sort((a, b) => a.ciphertext - b.ciphertext).map",
+        replace: "[...observations].map",
+      },
+    ],
     marker: 'recovery-score',
     computedBy:
       'src/app.ts render(): compareRecovery() scores the recovered map against the plaintext column; the wording, the `data-result` state, the pass/fail paint and `data-score` all branch on scorecard.matched/mismatched/unresolved in one expression. It does not branch on which scheme is selected.',
@@ -97,6 +134,13 @@ export const MARKER_MUTATIONS: MarkerMutation[] = [
   },
   {
     kind: 'verdict',
+    edits: [
+      {
+        file: "src/app.ts",
+        find: "    return guess == null\n      ? { text: '? AMBIGUOUS', result: 'ambiguous', className: 'amber-text' }\n      : { text: '! MISMATCH', result: 'mismatch', className: '' }",
+        replace: "    return { text: '! RECOVERED', result: 'recovered', className: 'alarm-text' }",
+      },
+    ],
     marker: 'row-outcome',
     computedBy:
       'src/app.ts render() rowOutcome(): per row, compares the attacker guess against the sealed truth once revealed, emitting ! RECOVERED, ! MISMATCH, ? AMBIGUOUS, or WAITING before a recovery has run -- each with its `data-result` and its paint chosen in the same branch.',
@@ -110,6 +154,13 @@ export const MARKER_MUTATIONS: MarkerMutation[] = [
   },
   {
     kind: 'verdict',
+    edits: [
+      {
+        file: "src/app.ts",
+        find: "    return guess == null\n      ? { text: '? AMBIGUOUS', result: 'ambiguous', className: 'amber-text' }",
+        replace: "    return guess == null\n      ? { text: '? AMBIGUOUS', result: 'recovered', className: 'alarm-text' }",
+      },
+    ],
     marker: 'row-outcome',
     computedBy:
       'src/app.ts render() rowOutcome(): the same branch that picks the words also picks `data-result` and the paint. This second record exists to prove the Fix 1 helper is load-bearing rather than decorative.',
@@ -123,6 +174,13 @@ export const MARKER_MUTATIONS: MarkerMutation[] = [
   },
   {
     kind: 'verdict',
+    edits: [
+      {
+        file: "src/ppe/dte.ts",
+        find: "    dteDecrypt(ciphertext)\n    return true",
+        replace: "    dteDecrypt(ciphertext)\n    return false",
+      },
+    ],
     marker: 'dte-tags',
     computedBy:
       'src/app.ts render(): sealed.every(row => dteTagVerifies(...)) AES-GCM-SIV-decrypts every department ciphertext and reports TAGS VERIFIED / pass or TAG FAILURE / fail.',
@@ -135,6 +193,13 @@ export const MARKER_MUTATIONS: MarkerMutation[] = [
   },
   {
     kind: 'verdict',
+    edits: [
+      {
+        file: "src/app.ts",
+        find: "${rows.length < 30 ?",
+        replace: "${rows.length < 0 ?",
+      },
+    ],
     marker: 'sample-warning',
     computedBy:
       'src/app.ts render(): rendered only while `rows.length < 30`, and it names the row count it is judging. Found by brief Fix 6 -- it renders at exactly one option of the row-count select, which `driveEveryState` never visited, so it sat outside the denominator both coverage rules enumerate over.',
@@ -148,6 +213,18 @@ export const MARKER_MUTATIONS: MarkerMutation[] = [
   },
   {
     kind: 'claim',
+    edits: [
+      {
+        file: "src/app.ts",
+        find: ".slice(0, 12).map(([name, count]) =>",
+        replace: ".slice(0, 12).map(([name, count], barIndex) =>",
+      },
+      {
+        file: "src/app.ts",
+        find: "data-claim=\"public-value\" data-value=\"${name}\">${name}</span>",
+        replace: "data-claim=\"public-value\" data-value=\"${barIndex}\">${barIndex}</span>",
+      },
+    ],
     marker: 'public-value',
     computedBy:
       'src/app.ts render(): the auxiliary histogram\'s bar labels, keyed from publicValues() -- the attacker\'s public table, not the sealed column.',
@@ -160,6 +237,13 @@ export const MARKER_MUTATIONS: MarkerMutation[] = [
   },
   {
     kind: 'claim',
+    edits: [
+      {
+        file: "src/app.ts",
+        find: "data-claim=\"public-count\" data-value=\"${count}\">${count}</b>",
+        replace: "data-claim=\"public-count\" data-value=\"${count + 1}\">${count + 1}</b>",
+      },
+    ],
     marker: 'public-count',
     computedBy:
       'src/app.ts render(): how many rows of the public population hold each value. This is the count the frequency attack aligns ciphertext bucket sizes against, so it is the attack premise made visible.',
@@ -173,6 +257,13 @@ export const MARKER_MUTATIONS: MarkerMutation[] = [
   },
   {
     kind: 'claim',
+    edits: [
+      {
+        file: "src/app.ts",
+        find: "data-claim=\"row-id\" data-value=\"${row.id}\">${row.id}</td><td class=\"cipher\"",
+        replace: "data-claim=\"row-id\" data-value=\"1\">1</td><td class=\"cipher\"",
+      },
+    ],
     marker: 'row-id',
     computedBy:
       'src/app.ts render(): the row identifier in BOTH tables. The per-row verdict rests on it -- `row-outcome` compares the attacker guess for row N against the sealed truth of row N, which is only meaningful if the two panels render the same N.',
@@ -186,6 +277,13 @@ export const MARKER_MUTATIONS: MarkerMutation[] = [
   },
   {
     kind: 'claim',
+    edits: [
+      {
+        file: "src/app.ts",
+        find: "const cipher = ciphertextFor(row.id)",
+        replace: "const cipher = row.id",
+      },
+    ],
     marker: 'sealed-cipher',
     computedBy:
       'src/app.ts ciphertextFor(): the stored ciphertext for the selected column and scheme. Under DTE, equal plaintexts must produce equal ciphertexts -- that IS the leak this lab exists to show -- and under the randomized control every one must differ.',
@@ -199,6 +297,13 @@ export const MARKER_MUTATIONS: MarkerMutation[] = [
   },
   {
     kind: 'claim',
+    edits: [
+      {
+        file: "src/app.ts",
+        find: "data-claim=\"attack-guess\" data-value=\"${guess === undefined ? 'pending' : guess === null ? 'ambiguous' : guess}\">${shown}</td>",
+        replace: "data-claim=\"attack-guess\" data-value=\"${actual(row)}\">${actual(row)}</td>",
+      },
+    ],
     marker: 'attack-guess',
     computedBy:
       'src/app.ts render(): the value the attack recovered for each row, straight from the `recovered` map, with `pending` / `ambiguous` for the states that carry no value.',
