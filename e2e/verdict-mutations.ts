@@ -92,7 +92,7 @@ export const MARKER_MUTATIONS: MarkerMutation[] = [
     edits: [
       {
         file: "src/app.ts",
-        find: "and ${classes.distinct} of ${sealed.length} stored ciphertexts are distinct",
+        find: "and ${classes.distinct} of ${activeSealed.length} stored ciphertexts are distinct",
         replace: "and 240 of 240 stored ciphertexts are distinct",
       },
       {

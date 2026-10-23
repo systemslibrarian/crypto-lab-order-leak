@@ -23,6 +23,9 @@ let recovered = new Map<number, string | number | null>()
 let column: DataColumn = 'department'
 let selectedScheme: QueryableScheme | 'control' = 'dte'
 let auxiliaryPopulation: AuxiliaryPopulation = 'matching'
+let operationEpoch = 0
+let sealing = false
+let pendingRowCount: number | null = null
 
 /**
  * The run status is a verdict, so its sentence and its machine-readable state
@@ -30,7 +33,7 @@ let auxiliaryPopulation: AuxiliaryPopulation = 'matching'
  * mutation that rewrites the words without moving `result` leaves the page
  * contradicting itself, and `expectVerdict` asserts both in a single call.
  */
-type RunResult = 'idle' | 'retired' | 'queried' | 'recovered' | 'rejected' | 'control-held' | 'control-broken'
+type RunResult = 'idle' | 'retired' | 'sealing' | 'seal-failed' | 'queried' | 'recovered' | 'rejected' | 'control-held' | 'control-broken'
 type RunStatus = { text: string; result: RunResult }
 let status: RunStatus = {
   text: 'Choose a column and scheme, then make the database answer a query without decrypting.',
@@ -75,8 +78,7 @@ function publicValues(): (string | number)[] {
       .flatMap(([value, count]) => Array.from({ length: count }, () => value))
   }
   if (column === 'age') {
-    const values = publicAgeValues(rows.length)
-    return auxiliaryPopulation === 'mismatch' ? values.filter((value) => value !== 65) : values
+    return publicAgeValues(rows.length, auxiliaryPopulation)
   }
   return publicSalaryValues(rows.length, auxiliaryPopulation)
 }
@@ -90,20 +92,29 @@ function decodeGuess(value: number | null): string | number | null {
 }
 
 async function query() {
+  if (sealing) return
+  const epoch = operationEpoch
   if (selectedScheme === 'control') {
     // Do not claim the query fails -- run it and report what it returned. The
     // token is a fresh encryption of the same value the DTE branch searches for.
+    const activeColumn = column
+    const activeSealed = sealed
+    const activeControlKey = table.controlKey
     const target = equalityTarget()
-    const token = await randomizedEncrypt(`${column}:${target}`, table.controlKey)
-    const matched = encryptedEquality(sealed, column, 'control', token).length
-    const classes = equalityClasses(sealed.map((row) => ({ id: row.id, ciphertext: row[column].control })))
+    const token = await randomizedEncrypt(`${activeColumn}:${target}`, activeControlKey)
+    // A column, scheme, population, or row-count change retires an in-flight
+    // query. Without this check its delayed result can overwrite the status of
+    // the newer experiment after the UI has already moved on.
+    if (epoch !== operationEpoch) return
+    const matched = encryptedEquality(activeSealed, activeColumn, 'control', token).length
+    const classes = equalityClasses(activeSealed.map((row) => ({ id: row.id, ciphertext: row[activeColumn].control })))
     status = matched === 0
       ? {
-        text: `Equality query for ${target} matched ${matched} of ${sealed.length} sealed rows. Re-encrypting the same value produced a ciphertext no stored row equals, and ${classes.distinct} of ${sealed.length} stored ciphertexts are distinct, so there is no equality or order relation to index on.`,
+        text: `Equality query for ${target} matched ${matched} of ${activeSealed.length} sealed rows. Re-encrypting the same value produced a ciphertext no stored row equals, and ${classes.distinct} of ${activeSealed.length} stored ciphertexts are distinct, so there is no equality or order relation to index on.`,
         result: 'control-held',
       }
       : {
-        text: `Equality query for ${target} matched ${matched} of ${sealed.length} sealed rows, and only ${classes.distinct} of ${sealed.length} stored ciphertexts are distinct. This column is NOT behaving as a randomized control: equal values are producing equal ciphertexts.`,
+        text: `Equality query for ${target} matched ${matched} of ${activeSealed.length} sealed rows, and only ${classes.distinct} of ${activeSealed.length} stored ciphertexts are distinct. This column is NOT behaving as a randomized control: equal values are producing equal ciphertexts.`,
         result: 'control-broken',
       }
   } else if (selectedScheme === 'dte') {
@@ -120,6 +131,7 @@ async function query() {
 }
 
 function recover() {
+  if (sealing) return
   recovered = new Map()
   try {
     if (selectedScheme === 'dte') {
@@ -179,7 +191,42 @@ function ciphertextFor(rowId: number): string | number {
   return value.length > 15 ? `${value.slice(0, 15)}...` : value
 }
 
+function retirePendingOperations(): void {
+  operationEpoch++
+  sealing = false
+  pendingRowCount = null
+}
+
+async function resealRows(nextSize: number): Promise<void> {
+  const epoch = ++operationEpoch
+  const nextRows = makeTable(nextSize)
+  pendingRowCount = nextSize
+  sealing = true
+  recovered = new Map()
+  revealed = false
+  status = { text: `Sealing a new ${nextSize}-row dataset. Query and recovery controls are paused.`, result: 'sealing' }
+  render()
+
+  try {
+    const nextTable = await sealTableWithKey(nextRows, oreKey)
+    if (epoch !== operationEpoch) return
+    rows = nextRows
+    table = nextTable
+    sealed = nextTable.rows
+    pendingRowCount = null
+    sealing = false
+    status = { text: `Dataset reshuffled to ${rows.length} rows. Previous recovery retired.`, result: 'retired' }
+  } catch {
+    if (epoch !== operationEpoch) return
+    pendingRowCount = null
+    sealing = false
+    status = { text: 'Dataset reshuffle failed. The previous sealed dataset remains active.', result: 'seal-failed' }
+  }
+  render()
+}
+
 function render() {
+  const rowSelection = pendingRowCount ?? rows.length
   const distribution = publicValues().reduce<Record<string, number>>((counts, value) => {
     counts[value] = (counts[value] ?? 0) + 1
     return counts
@@ -226,19 +273,19 @@ function render() {
     <section class="intro"><p><strong>The lesson:</strong> queryable encryption leaves a pattern visible on purpose. The database uses that pattern to answer a query; an attacker can use the same pattern, plus public statistics, to infer the hidden values without the key.</p><p><strong>Try the contrast:</strong> DTE leaks equality, OPE leaks order, ORE leaks order plus bit structure, and randomized AES-GCM leaks neither stable relation.</p></section>
     <section class="steps" aria-label="Lab steps"><span>1. Pick a column</span><span>2. Pick a scheme</span><span>3. Query</span><span>4. Recover and reveal</span></section>
     <section class="controls" aria-label="Experiment controls"><div class="matrix-controls"><div><span class="control-label">1 · DATA TO PROTECT</span><div class="segmented" role="group" aria-label="Database column">
-      ${(['department', 'age', 'salary'] as const).map((choice) => `<button class="${column === choice ? 'active' : ''}" data-column="${choice}" aria-pressed="${column === choice}">${choice === 'department' ? 'Department' : choice === 'age' ? 'Age' : 'Salary'}</button>`).join('')}
+      ${(['department', 'age', 'salary'] as const).map((choice) => `<button class="${column === choice ? 'active' : ''}" data-column="${choice}" aria-pressed="${column === choice}" ${sealing ? 'disabled' : ''}>${choice === 'department' ? 'Department' : choice === 'age' ? 'Age' : 'Salary'}</button>`).join('')}
     </div></div><div><span class="control-label">2 · ENCRYPTION CHOICE</span><div class="segmented" role="group" aria-label="Encryption scheme">
-      ${(['dte', 'ope', 'ore', 'control'] as const).map((choice) => `<button class="${selectedScheme === choice ? 'active' : ''}" data-scheme="${choice}" aria-pressed="${selectedScheme === choice}">${choice === 'dte' ? 'Deterministic (DTE)' : choice === 'ope' ? 'Order-preserving (OPE)' : choice === 'ore' ? 'Order-revealing (ORE)' : 'Randomized control'}</button>`).join('')}
-    </div></div></div><div class="control-pair"><label>Rows <select id="row-count"><option value="24" ${rows.length === 24 ? 'selected' : ''}>24 (tiny)</option><option value="240" ${rows.length === 240 ? 'selected' : ''}>240</option><option value="500" ${rows.length === 500 ? 'selected' : ''}>500</option><option value="1000" ${rows.length === 1000 ? 'selected' : ''}>1,000</option></select></label><label>Public population <select id="population"><option value="matching" ${auxiliaryPopulation === 'matching' ? 'selected' : ''}>Matching synthetic</option><option value="shifted" ${auxiliaryPopulation === 'shifted' ? 'selected' : ''}>Shifted population</option><option value="mismatch" ${auxiliaryPopulation === 'mismatch' ? 'selected' : ''}>Mismatched support</option></select></label></div></section>
+      ${(['dte', 'ope', 'ore', 'control'] as const).map((choice) => `<button class="${selectedScheme === choice ? 'active' : ''}" data-scheme="${choice}" aria-pressed="${selectedScheme === choice}" ${sealing ? 'disabled' : ''}>${choice === 'dte' ? 'Deterministic (DTE)' : choice === 'ope' ? 'Order-preserving (OPE)' : choice === 'ore' ? 'Order-revealing (ORE)' : 'Randomized control'}</button>`).join('')}
+    </div></div></div><div class="control-pair"><label>Rows <select id="row-count" ${sealing ? 'disabled' : ''}><option value="24" ${rowSelection === 24 ? 'selected' : ''}>24 (tiny)</option><option value="240" ${rowSelection === 240 ? 'selected' : ''}>240</option><option value="500" ${rowSelection === 500 ? 'selected' : ''}>500</option><option value="1000" ${rowSelection === 1000 ? 'selected' : ''}>1,000</option></select></label><label>Public population <select id="population" ${sealing ? 'disabled' : ''}><option value="matching" ${auxiliaryPopulation === 'matching' ? 'selected' : ''}>Matching synthetic</option><option value="shifted" ${auxiliaryPopulation === 'shifted' ? 'selected' : ''}>Shifted population</option><option value="mismatch" ${auxiliaryPopulation === 'mismatch' ? 'selected' : ''}>Mismatched support</option></select></label></div></section>
     <section class="leakage-ledger" aria-labelledby="tradeoff-title"><div class="ledger-heading"><span>SELECTED EXPERIMENT</span><h2 id="tradeoff-title">${columnName()} under ${schemeName()}</h2></div><div class="ledger-facts"><div><b>DATABASE GAINS</b><p>${currentLesson.feature}</p></div><div><b>PATTERN LEFT VISIBLE</b><p>${currentLesson.leak}</p></div><div class="${isControl ? 'safe-fact' : 'danger-fact'}"><b>ATTACKER CAN</b><p>${currentLesson.attack}</p></div></div></section>
     ${rows.length < 30 ? `<p class="warning" role="status" data-verdict="sample-warning" data-result="unstable">SAMPLE WARNING: ${rows.length} rows is fewer than the 30 that make frequency statistics stable. Treat this result as an illustration, not evidence.</p>` : ''}
     <section class="lab-grid">
-      <article class="panel dba"><div class="panel-title"><span>DBA VIEW</span><small>${columnName()} · ${schemeName()} · ${isControl ? 'control' : 'leaky by design'}</small></div><p>The database sees sealed values and evaluates only the selected ciphertext relation.</p><button class="command" id="query">${isControl ? 'Try a query' : 'Run query on ciphertexts'}</button><output class="status neutral" role="status" aria-live="polite" data-verdict="run-status" data-result="${status.result}">${status.text}</output>
+      <article class="panel dba"><div class="panel-title"><span>DBA VIEW</span><small>${columnName()} · ${schemeName()} · ${isControl ? 'control' : 'leaky by design'}</small></div><p>The database sees sealed values and evaluates only the selected ciphertext relation.</p><button class="command" id="query" ${sealing ? 'disabled' : ''}>${isControl ? 'Try a query' : 'Run query on ciphertexts'}</button><output class="status neutral" role="status" aria-live="polite" data-verdict="run-status" data-result="${status.result}">${status.text}</output>
       <div class="table-wrap" tabindex="0" role="region" aria-label="Sealed database rows"><table><thead><tr><th>ROW</th><th>SEALED VALUE</th><th>PROPERTY</th></tr></thead><tbody>${selected().map((row) => { const cipher = ciphertextFor(row.id); return `<tr><td data-claim="row-id" data-value="${row.id}">${row.id}</td><td class="cipher" data-claim="sealed-cipher" data-value="${cipher}">${cipher}</td><td>${isControl ? 'none' : selectedScheme === 'dte' ? '=' : selectedScheme === 'ore' ? 'order + MSDB' : 'order'}</td></tr>` }).join('')}</tbody></table></div></article>
       <article class="panel attacker"><div class="panel-title"><span>ATTACKER VIEW</span><small>ciphertexts + public statistics</small></div><p>There is no key here. ${attackDescription}</p>
-      <div class="histogram" role="group" aria-label="Public distribution">${publicBars}</div><button class="command alarm" id="recover">Run recovery</button>
+      <div class="histogram" role="group" aria-label="Public distribution">${publicBars}</div><button class="command alarm" id="recover" ${sealing ? 'disabled' : ''}>Run recovery</button>
       <div class="table-wrap" tabindex="0" role="region" aria-label="Recovered attacker rows"><table><thead><tr><th>ROW</th><th>RECOVERED</th><th>VERDICT</th></tr></thead><tbody>${selected().map((row) => { const guess = recovered.get(row.id); const verdict = rowOutcome(row); const shown = guess === undefined ? '—' : guess === null ? 'ambiguous' : String(guess); return `<tr><td data-claim="row-id" data-value="${row.id}">${row.id}</td><td data-claim="attack-guess" data-value="${guess === undefined ? 'pending' : guess === null ? 'ambiguous' : guess}">${shown}</td><td data-verdict="row-outcome" data-result="${verdict.result}" class="${verdict.className}">${verdict.text}</td></tr>` }).join('')}</tbody></table></div>
-      <div class="reveal"><button class="command secondary" id="reveal" ${recovered.size ? '' : 'disabled'}>Reveal sealed truth</button>${revealed ? `<strong class="${scoreVerdict.className}" data-verdict="recovery-score" data-result="${scoreVerdict.result}" data-score="${scorecard.matched}/${rows.length}">${scoreVerdict.text}</strong>` : ''}</div></article>
+      <div class="reveal"><button class="command secondary" id="reveal" ${!sealing && recovered.size ? '' : 'disabled'}>Reveal sealed truth</button>${revealed ? `<strong class="${scoreVerdict.className}" data-verdict="recovery-score" data-result="${scoreVerdict.result}" data-score="${scorecard.matched}/${rows.length}">${scoreVerdict.text}</strong>` : ''}</div></article>
     </section>
     <section class="evidence"><h2>Authenticated, never decrypted, and recovered</h2><p>Every deterministic AES-GCM-SIV department ciphertext has a valid authentication tag: <strong data-verdict="dte-tags" data-result="${tagVerdict.result}">${tagVerdict.text}</strong>. The query module holds no key, equality still succeeds, and frequency analysis recovers cells from public counts.</p></section>
     <details><summary>Method notes and limits</summary><p>BCLO uses exact hypergeometric splitting over an 8-bit plaintext to 16-bit ciphertext domain. Binary CLWW emits eight HMAC-derived trits; all pairwise comparisons reconstruct a radix tree. NKW cumulative matching aligns its bucket CDF to auxiliary data. The OPE sorting attack is complete for dense ages but incomplete for sparse salaries because order omits the gaps.</p></details>
@@ -247,6 +294,7 @@ function render() {
   app.querySelectorAll<HTMLButtonElement>('[data-column]').forEach((button) => button.addEventListener('click', () => {
     const next = button.dataset.column as DataColumn
     if (next === column) return
+    retirePendingOperations()
     column = next
     recovered = new Map()
     revealed = false
@@ -256,6 +304,7 @@ function render() {
   app.querySelectorAll<HTMLButtonElement>('[data-scheme]').forEach((button) => button.addEventListener('click', () => {
     const next = button.dataset.scheme as typeof selectedScheme
     if (next === selectedScheme) return
+    retirePendingOperations()
     selectedScheme = next
     recovered = new Map()
     revealed = false
@@ -265,8 +314,8 @@ function render() {
   app.querySelector<HTMLButtonElement>('#query')!.addEventListener('click', () => { void query() })
   app.querySelector<HTMLButtonElement>('#recover')!.addEventListener('click', recover)
   app.querySelector<HTMLButtonElement>('#reveal')!.addEventListener('click', () => { revealed = true; render() })
-  app.querySelector<HTMLSelectElement>('#row-count')!.addEventListener('change', async (event) => { rows = makeTable(Number((event.target as HTMLSelectElement).value)); table = await sealTableWithKey(rows, oreKey); sealed = table.rows; recovered = new Map(); revealed = false; status = { text: `Dataset reshuffled to ${rows.length} rows. Previous recovery retired.`, result: 'retired' }; render() })
-  app.querySelector<HTMLSelectElement>('#population')!.addEventListener('change', (event) => { auxiliaryPopulation = (event.target as HTMLSelectElement).value as AuxiliaryPopulation; recovered = new Map(); revealed = false; status = { text: `Auxiliary population changed to ${auxiliaryPopulation}. Previous recovery retired.`, result: 'retired' }; render() })
+  app.querySelector<HTMLSelectElement>('#row-count')!.addEventListener('change', (event) => { void resealRows(Number((event.target as HTMLSelectElement).value)) })
+  app.querySelector<HTMLSelectElement>('#population')!.addEventListener('change', (event) => { retirePendingOperations(); auxiliaryPopulation = (event.target as HTMLSelectElement).value as AuxiliaryPopulation; recovered = new Map(); revealed = false; status = { text: `Auxiliary population changed to ${auxiliaryPopulation}. Previous recovery retired.`, result: 'retired' }; render() })
 }
 
 render()

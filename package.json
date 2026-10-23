@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:a11y": "playwright test",
-    "test:verdicts": "playwright test --project=verdict-coverage"
+    "test:verdicts": "playwright test --project=verdict-coverage",
+    "test:mutations": "node scripts/mutation.mjs verify",
+    "test:workflow": "node --test tests/workflow-controls.test.mjs"
   },
   "dependencies": {
     "@noble/ciphers": "^2.1.1",

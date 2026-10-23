@@ -665,10 +665,12 @@ export async function driveAllStates(page: Page, theme: string): Promise<void> {
 
   await page.locator('#row-count').selectOption('24');
   await expect(page.locator('#row-count')).toHaveValue('24');
+  await expect(page.locator('[data-verdict="run-status"]')).toContainText('Dataset reshuffled to 24 rows');
   await expect(page.getByRole('status').filter({ hasText: 'SAMPLE WARNING' })).toBeVisible();
   await scanAt('24-row sample warning visible and previous recovery retired');
   await page.locator('#row-count').selectOption('240');
   await expect(page.locator('#row-count')).toHaveValue('240');
+  await expect(page.locator('[data-verdict="run-status"]')).toContainText('Dataset reshuffled to 240 rows');
   await expect(page.getByRole('status').filter({ hasText: 'SAMPLE WARNING' })).toHaveCount(0);
   await scanAt('240-row dataset restored');
 

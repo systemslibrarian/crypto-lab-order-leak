@@ -72,6 +72,12 @@ test('OPE sorting recovers dense age but fails explicitly on sparse salary', asy
   })
   await expect(page.locator('[data-verdict="recovery-score"]')).toHaveAttribute('data-score', `${rows}/${rows}`)
 
+  await page.getByLabel('Public population').selectOption('shifted')
+  await page.getByRole('button', { name: 'Run recovery' }).click()
+  await page.getByRole('button', { name: 'Reveal sealed truth' }).click()
+  await expect(page.locator('[data-verdict="recovery-score"]')).not.toHaveAttribute('data-score', `${rows}/${rows}`)
+  await page.getByLabel('Public population').selectOption('matching')
+
   await page.getByRole('button', { name: 'Salary', exact: true }).click()
   await page.getByRole('button', { name: 'Run recovery' }).click()
   await expectVerdict(page, 'run-status', {
@@ -94,6 +100,59 @@ test('changing auxiliary data retires recovery while a no-op scheme selection do
     className: 'status neutral',
   })
   await expect(page.getByRole('button', { name: 'Reveal sealed truth' })).toBeDisabled()
+})
+
+test('a delayed randomized query cannot overwrite a newer experiment', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Randomized control' }).click()
+
+  // Dispatch both actions in one browser task. query() reaches Web Crypto's
+  // promise before the column click retires it, reproducing the stale-result
+  // window without relying on machine timing.
+  await page.evaluate(() => {
+    document.querySelector<HTMLButtonElement>('#query')!.click()
+    document.querySelector<HTMLButtonElement>('[data-column="age"]')!.click()
+  })
+
+  const expected = {
+    text: 'Selected Age under AES-GCM randomized control. Previous recovery retired.',
+    result: 'retired',
+    className: 'status neutral',
+  }
+  await expectVerdict(page, 'run-status', expected)
+  await page.waitForTimeout(100)
+  await expectVerdict(page, 'run-status', expected)
+})
+
+test('overlapping row-count changes commit only the newest sealed table', async ({ page }) => {
+  await page.goto('/')
+
+  // The first change synchronously re-renders and detaches this select, but its
+  // listener remains callable. A second event on the saved node starts another
+  // seal before the 1,000-row operation finishes.
+  await page.evaluate(() => {
+    const select = document.querySelector<HTMLSelectElement>('#row-count')!
+    select.value = '1000'
+    select.dispatchEvent(new Event('change', { bubbles: true }))
+    select.value = '24'
+    select.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+
+  await expectVerdict(page, 'run-status', {
+    text: 'Dataset reshuffled to 24 rows. Previous recovery retired.',
+    result: 'retired',
+    className: 'status neutral',
+  })
+  await page.waitForTimeout(250)
+  await expect(page.locator('#row-count')).toHaveValue('24')
+
+  await page.getByRole('button', { name: 'Randomized control' }).click()
+  await page.getByRole('button', { name: 'Try a query' }).click()
+  await expectVerdict(page, 'run-status', {
+    text: /^Equality query for Finance matched 0 of 24 sealed rows\..*24 of 24 stored ciphertexts are distinct/,
+    result: 'control-held',
+    className: 'status neutral',
+  })
 })
 
 test('tiny datasets warn, the warning names the sample it judges, and hidden content stays unpainted', async ({ page }) => {
