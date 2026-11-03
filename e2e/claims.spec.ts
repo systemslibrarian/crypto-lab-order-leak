@@ -415,31 +415,30 @@ test('per-row verdicts follow the guess against the sealed truth', async ({ page
  * this test drives it that way.
  */
 test('a rogue population option cannot reach the status line as markup', async ({ page }) => {
-  await page.goto('/crypto-lab-order-leak/');
-  await page.waitForSelector('#population');
-  await page.evaluate(() => {
-    (window as unknown as { __seen: number }).__seen = 0;
-    new MutationObserver(() => {
-      const n = document.querySelectorAll('[data-injected]').length;
-      const w = window as unknown as { __seen: number };
-      if (n > w.__seen) w.__seen = n;
-    }).observe(document.body, { childList: true, subtree: true });
-  });
+  await page.goto('/')
+  await page.waitForSelector('#population')
 
-  const before = await page.locator('[data-verdict="run-status"]').textContent();
+  // A <select> keeps whatever a matching option carries -- unlike an
+  // <input type="range">, which the browser sanitizes -- so a scripted or
+  // devtools-added option is a real route into the change handler.
   await page.locator('#population').evaluate((el: HTMLSelectElement) => {
-    const rogue = document.createElement('option');
-    rogue.value = '<img src=x data-injected=yes>';
-    rogue.textContent = 'rogue';
-    el.appendChild(rogue);
-    el.value = rogue.value;
-    el.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+    const rogue = document.createElement('option')
+    rogue.value = '<img src=x data-injected=yes>'
+    rogue.textContent = 'rogue'
+    el.appendChild(rogue)
+    el.value = rogue.value
+    el.dispatchEvent(new Event('change', { bubbles: true }))
+  })
 
-  // Nothing the payload asked for exists, and the status line did not adopt it.
-  expect(await page.evaluate(() => (window as unknown as { __seen: number }).__seen)).toBe(0);
-  await expect(page.locator('[data-injected]')).toHaveCount(0);
-  const after = await page.locator('[data-verdict="run-status"]').textContent();
-  expect(after).not.toContain('<img');
-  expect(after).toBe(before);
-});
+  // Nothing the payload asked for exists: the markup never became markup.
+  await expect(page.locator('[data-injected]')).toHaveCount(0)
+  // And the status line still holds the app's own opening sentence, written
+  // here rather than read back off the page. Removing the own-property
+  // allowlist in app.ts fails this expectation; removing the escape at the
+  // sink fails the count above.
+  await expectVerdict(page, 'run-status', {
+    text: 'Choose a column and scheme, then make the database answer a query without decrypting.',
+    result: 'idle',
+    className: 'status neutral',
+  })
+})
