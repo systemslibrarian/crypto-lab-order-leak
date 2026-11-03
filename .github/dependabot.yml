@@ -1,3 +1,5 @@
+# Routine updates are grouped to keep the queue bounded. Breaking majors stay
+# separate and the workflow deliberately leaves them for human review.
 version: 2
 updates:
   - package-ecosystem: "npm"
@@ -15,3 +17,4 @@ updates:
     groups:
       github-actions:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
