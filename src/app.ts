@@ -1,4 +1,5 @@
 import './styles.css'
+import { escapeHtml } from './escape'
 import { cumulativeRecover } from './attack/cumulative'
 import { frequencyRecover } from './attack/frequency'
 import { compareOreObservations, recoverOreTree } from './attack/msdb'
@@ -6,7 +7,7 @@ import { sortingRecover } from './attack/sorting'
 import { equalityClasses } from './attack/equality-classes'
 import { encryptedEquality, encryptedRange, encryptedSort, type QueryableScheme } from './db/query'
 import { departmentDomain, encodeColumnValue, makeTable, sealTableWithKey, type DataColumn, type Person } from './db/table'
-import { publicAgeValues, publicDepartmentDistribution, publicSalaryValues, type AuxiliaryPopulation } from './data/public'
+import { publicAgeValues, publicDepartmentDistribution, publicSalaryValues, type AuxiliaryPopulation, isAuxiliaryPopulation } from './data/public'
 import { dteEncrypt, dteTagVerifies, toHex } from './ppe/dte'
 import { randomizedEncrypt } from './ppe/control'
 import { opeEncrypt } from './ppe/ope-bclo'
@@ -280,7 +281,7 @@ function render() {
     <section class="leakage-ledger" aria-labelledby="tradeoff-title"><div class="ledger-heading"><span>SELECTED EXPERIMENT</span><h2 id="tradeoff-title">${columnName()} under ${schemeName()}</h2></div><div class="ledger-facts"><div><b>DATABASE GAINS</b><p>${currentLesson.feature}</p></div><div><b>PATTERN LEFT VISIBLE</b><p>${currentLesson.leak}</p></div><div class="${isControl ? 'safe-fact' : 'danger-fact'}"><b>ATTACKER CAN</b><p>${currentLesson.attack}</p></div></div></section>
     ${rows.length < 30 ? `<p class="warning" role="status" data-verdict="sample-warning" data-result="unstable">SAMPLE WARNING: ${rows.length} rows is fewer than the 30 that make frequency statistics stable. Treat this result as an illustration, not evidence.</p>` : ''}
     <section class="lab-grid">
-      <article class="panel dba"><div class="panel-title"><span>DBA VIEW</span><small>${columnName()} · ${schemeName()} · ${isControl ? 'control' : 'leaky by design'}</small></div><p>The database sees sealed values and evaluates only the selected ciphertext relation.</p><button class="command" id="query" ${sealing ? 'disabled' : ''}>${isControl ? 'Try a query' : 'Run query on ciphertexts'}</button><output class="status neutral" role="status" aria-live="polite" data-verdict="run-status" data-result="${status.result}">${status.text}</output>
+      <article class="panel dba"><div class="panel-title"><span>DBA VIEW</span><small>${columnName()} · ${schemeName()} · ${isControl ? 'control' : 'leaky by design'}</small></div><p>The database sees sealed values and evaluates only the selected ciphertext relation.</p><button class="command" id="query" ${sealing ? 'disabled' : ''}>${isControl ? 'Try a query' : 'Run query on ciphertexts'}</button><output class="status neutral" role="status" aria-live="polite" data-verdict="run-status" data-result="${escapeHtml(status.result)}">${escapeHtml(status.text)}</output>
       <div class="table-wrap" tabindex="0" role="region" aria-label="Sealed database rows"><table><thead><tr><th>ROW</th><th>SEALED VALUE</th><th>PROPERTY</th></tr></thead><tbody>${selected().map((row) => { const cipher = ciphertextFor(row.id); return `<tr><td data-claim="row-id" data-value="${row.id}">${row.id}</td><td class="cipher" data-claim="sealed-cipher" data-value="${cipher}">${cipher}</td><td>${isControl ? 'none' : selectedScheme === 'dte' ? '=' : selectedScheme === 'ore' ? 'order + MSDB' : 'order'}</td></tr>` }).join('')}</tbody></table></div></article>
       <article class="panel attacker"><div class="panel-title"><span>ATTACKER VIEW</span><small>ciphertexts + public statistics</small></div><p>There is no key here. ${attackDescription}</p>
       <div class="histogram" role="group" aria-label="Public distribution">${publicBars}</div><button class="command alarm" id="recover" ${sealing ? 'disabled' : ''}>Run recovery</button>
@@ -315,7 +316,7 @@ function render() {
   app.querySelector<HTMLButtonElement>('#recover')!.addEventListener('click', recover)
   app.querySelector<HTMLButtonElement>('#reveal')!.addEventListener('click', () => { revealed = true; render() })
   app.querySelector<HTMLSelectElement>('#row-count')!.addEventListener('change', (event) => { void resealRows(Number((event.target as HTMLSelectElement).value)) })
-  app.querySelector<HTMLSelectElement>('#population')!.addEventListener('change', (event) => { retirePendingOperations(); auxiliaryPopulation = (event.target as HTMLSelectElement).value as AuxiliaryPopulation; recovered = new Map(); revealed = false; status = { text: `Auxiliary population changed to ${auxiliaryPopulation}. Previous recovery retired.`, result: 'retired' }; render() })
+  app.querySelector<HTMLSelectElement>('#population')!.addEventListener('change', (event) => { retirePendingOperations(); const chosen = (event.target as HTMLSelectElement).value; if (!isAuxiliaryPopulation(chosen)) return; auxiliaryPopulation = chosen; recovered = new Map(); revealed = false; status = { text: `Auxiliary population changed to ${auxiliaryPopulation}. Previous recovery retired.`, result: 'retired' }; render() })
 }
 
 render()

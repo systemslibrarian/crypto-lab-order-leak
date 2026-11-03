@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { publicAgeValues } from './public'
+import { publicAgeValues, AUXILIARY_POPULATIONS, isAuxiliaryPopulation } from './public'
 
 describe('public age populations', () => {
   it('matches the sealed age cycle by default', () => {
@@ -22,5 +22,25 @@ describe('public age populations', () => {
     const mismatch = publicAgeValues(240, 'mismatch')
     expect(mismatch).not.toContain(65)
     expect(mismatch).toHaveLength(235)
+  })
+})
+
+describe('isAuxiliaryPopulation', () => {
+  it('accepts exactly the populations the control offers', () => {
+    for (const name of AUXILIARY_POPULATIONS) expect(isAuxiliaryPopulation(name)).toBe(true)
+    expect([...AUXILIARY_POPULATIONS].sort()).toEqual(['matching', 'mismatch', 'shifted'])
+  })
+
+  it('rejects anything else, including markup and inherited keys', () => {
+    for (const bad of [
+      '',
+      'Matching',
+      'uniform',
+      '<img src=x data-injected=yes>',
+      'toString',
+      '__proto__'
+    ]) {
+      expect(isAuxiliaryPopulation(bad), bad).toBe(false)
+    }
   })
 })

@@ -403,3 +403,43 @@ test('per-row verdicts follow the guess against the sealed truth', async ({ page
   await expect(page.locator('[data-verdict="recovery-score"]')).toHaveAttribute('data-score', `0/${rows}`)
   await expectEveryVerdict(page, 'row-outcome', { text: '? AMBIGUOUS', result: 'ambiguous', className: 'amber-text', count: shown })
 })
+
+/**
+ * Guard for CodeQL js/xss-through-dom (sink src/app.ts, the DBA status line).
+ *
+ * The flow is short: the #population select's value is cast to
+ * AuxiliaryPopulation, interpolated into the status sentence, and that sentence
+ * is rendered with innerHTML. The select offers only three values this app
+ * wrote, so the page cannot supply markup -- but a select keeps whatever value
+ * a matching option carries, so a scripted option reaches the render path, and
+ * this test drives it that way.
+ */
+test('a rogue population option cannot reach the status line as markup', async ({ page }) => {
+  await page.goto('/crypto-lab-order-leak/');
+  await page.waitForSelector('#population');
+  await page.evaluate(() => {
+    (window as unknown as { __seen: number }).__seen = 0;
+    new MutationObserver(() => {
+      const n = document.querySelectorAll('[data-injected]').length;
+      const w = window as unknown as { __seen: number };
+      if (n > w.__seen) w.__seen = n;
+    }).observe(document.body, { childList: true, subtree: true });
+  });
+
+  const before = await page.locator('[data-verdict="run-status"]').textContent();
+  await page.locator('#population').evaluate((el: HTMLSelectElement) => {
+    const rogue = document.createElement('option');
+    rogue.value = '<img src=x data-injected=yes>';
+    rogue.textContent = 'rogue';
+    el.appendChild(rogue);
+    el.value = rogue.value;
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+
+  // Nothing the payload asked for exists, and the status line did not adopt it.
+  expect(await page.evaluate(() => (window as unknown as { __seen: number }).__seen)).toBe(0);
+  await expect(page.locator('[data-injected]')).toHaveCount(0);
+  const after = await page.locator('[data-verdict="run-status"]').textContent();
+  expect(after).not.toContain('<img');
+  expect(after).toBe(before);
+});

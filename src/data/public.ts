@@ -2,6 +2,17 @@ const departments = ['Support', 'Support', 'Support', 'Finance', 'Finance', 'Res
 const salaryBands = [31, 34, 42, 55, 73, 101, 149, 233]
 export type AuxiliaryPopulation = 'matching' | 'shifted' | 'mismatch'
 
+/** The populations the control offers, as a runtime check rather than a cast. */
+export const AUXILIARY_POPULATIONS: readonly AuxiliaryPopulation[] = [
+  'matching',
+  'shifted',
+  'mismatch'
+]
+
+export function isAuxiliaryPopulation(value: string): value is AuxiliaryPopulation {
+  return (AUXILIARY_POPULATIONS as readonly string[]).includes(value)
+}
+
 export function publicDepartmentDistribution(size: number, population: AuxiliaryPopulation = 'matching'): Record<string, number> {
   const labels = [...new Set(departments)]
   const counts = Object.fromEntries(labels.map((label) => [label, 0]))
