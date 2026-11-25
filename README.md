@@ -9,7 +9,7 @@ Order Leak is a browser-only teaching demo of deterministic AES-GCM-SIV, an exac
 1. The DBA view runs equality, range, and sorting queries on sealed values.
 2. The attacker view receives only ciphertext observations and separately generated synthetic public data, then performs frequency matching, sorting, NKW cumulative matching, and pairwise MSDB-tree recovery.
 3. Reveal scores every recovered cell against separately held truth. The randomized AES-GCM control is put through the same equality query and the same frequency attack as the leaky schemes, and the page reports what they returned at whatever row count is selected: no row matched, every stored ciphertext distinct, no bucket holding more than one row. Those figures are counted per run, not printed from the default — the claims suite runs the control at 240 rows and at 1,000 so a literal cannot be right at both.
-4. The authentication fixture verifies every AES-GCM-SIV tag while showing that authentication does not hide equality leakage.
+4. The authentication fixture verifies the deterministic AES-GCM-SIV department tag in every row while showing that authentication does not hide equality leakage.
 5. Matching and shifted auxiliary populations show how inference quality depends on public-data fit; a 24-row option warns that tiny samples are unstable.
 
 ## When to Use It
@@ -53,7 +53,7 @@ npm run test:a11y
 npm run test:mutations
 ```
 
-The suite has 30 unit tests, 8 workflow-control tests, and 22 production-browser claim, verdict-coverage, and accessibility tests. A separate replay gate proves that all 12 recorded rendered-claim mutations are still caught. Two known-answer tests reproduce the RFC 8452 AES-128 and AES-256 empty-plaintext vectors. The suite also checks the live leakage explanation, full sealed matrix and ciphertext-only query API, atomic resealing and stale-query retirement, matching versus shifted auxiliary populations, all 65,536 CLWW comparisons, full-domain OPE monotonicity, exact hypergeometric support, dense-versus-sparse sorting behavior, grouped cumulative matching, pairwise MSDB tree reconstruction, malformed ciphertext rejection, per-session key material for all three schemes, attack-module isolation, randomized-control uniqueness, score arithmetic, support-mismatch rejection, edge cases, arithmetic text contrast, non-text contrast, reflow, and WCAG 2.1 A/AA across desktop and mobile states.
+The suite has 32 unit tests, 8 workflow-control tests, and 22 production-browser claim, verdict-coverage, and accessibility tests. A separate replay gate proves that all 12 recorded rendered-claim mutations are still caught. Two known-answer tests reproduce the RFC 8452 AES-128 and AES-256 empty-plaintext vectors. The suite also checks the live leakage explanation, full sealed matrix and ciphertext-only query API, atomic resealing and stale-query retirement, matching versus shifted auxiliary populations, all 65,536 CLWW comparisons, full-domain OPE monotonicity, exact hypergeometric support, dense-versus-sparse sorting behavior, grouped cumulative matching, pairwise MSDB tree reconstruction, malformed ciphertext rejection, per-session key material for all three schemes, attack-module isolation, randomized-control uniqueness, score arithmetic, support-mismatch rejection, edge cases, arithmetic text contrast, non-text contrast, reflow, and WCAG 2.1 A/AA across desktop and mobile states.
 
 ## Performance
 

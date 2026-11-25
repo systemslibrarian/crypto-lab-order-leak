@@ -216,12 +216,12 @@ async function resealRows(nextSize: number): Promise<void> {
     sealed = nextTable.rows
     pendingRowCount = null
     sealing = false
-    status = { text: `Dataset reshuffled to ${rows.length} rows. Previous recovery retired.`, result: 'retired' }
+    status = { text: `Synthetic dataset resized and resealed to ${rows.length} rows. Previous recovery retired.`, result: 'retired' }
   } catch {
     if (epoch !== operationEpoch) return
     pendingRowCount = null
     sealing = false
-    status = { text: 'Dataset reshuffle failed. The previous sealed dataset remains active.', result: 'seal-failed' }
+    status = { text: 'Dataset resize failed. The previous sealed dataset remains active.', result: 'seal-failed' }
   }
   render()
 }
@@ -288,7 +288,7 @@ function render() {
       <div class="table-wrap" tabindex="0" role="region" aria-label="Recovered attacker rows"><table><thead><tr><th>ROW</th><th>RECOVERED</th><th>VERDICT</th></tr></thead><tbody>${selected().map((row) => { const guess = recovered.get(row.id); const verdict = rowOutcome(row); const shown = guess === undefined ? '—' : guess === null ? 'ambiguous' : String(guess); return `<tr><td data-claim="row-id" data-value="${row.id}">${row.id}</td><td data-claim="attack-guess" data-value="${guess === undefined ? 'pending' : guess === null ? 'ambiguous' : guess}">${shown}</td><td data-verdict="row-outcome" data-result="${verdict.result}" class="${verdict.className}">${verdict.text}</td></tr>` }).join('')}</tbody></table></div>
       <div class="reveal"><button class="command secondary" id="reveal" ${!sealing && recovered.size ? '' : 'disabled'}>Reveal sealed truth</button>${revealed ? `<strong class="${scoreVerdict.className}" data-verdict="recovery-score" data-result="${scoreVerdict.result}" data-score="${scorecard.matched}/${rows.length}">${scoreVerdict.text}</strong>` : ''}</div></article>
     </section>
-    <section class="evidence"><h2>Authenticated, never decrypted, and recovered</h2><p>Every deterministic AES-GCM-SIV department ciphertext has a valid authentication tag: <strong data-verdict="dte-tags" data-result="${tagVerdict.result}">${tagVerdict.text}</strong>. The query module holds no key, equality still succeeds, and frequency analysis recovers cells from public counts.</p></section>
+    <section class="evidence"><h2>Authenticated, never decrypted, and recovered</h2><p>Authentication check for each deterministic AES-GCM-SIV department ciphertext: <strong data-verdict="dte-tags" data-result="${tagVerdict.result}">${tagVerdict.text}</strong>. The query module holds no key, equality still succeeds, and frequency analysis recovers cells from public counts.</p></section>
     <details><summary>Method notes and limits</summary><p>BCLO uses exact hypergeometric splitting over an 8-bit plaintext to 16-bit ciphertext domain. Binary CLWW emits eight HMAC-derived trits; all pairwise comparisons reconstruct a radix tree. NKW cumulative matching aligns its bucket CDF to auxiliary data. The OPE sorting attack is complete for dense ages but incomplete for sparse salaries because order omits the gaps.</p></details>
     <footer class="scripture-footer"><p>So whether you eat or drink or whatever you do, do it all for the glory of God. — 1 Corinthians 10:31</p></footer>`
 

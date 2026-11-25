@@ -55,7 +55,7 @@ const allDistinct = (count: number) => Array.from({ length: count }, (_, index) 
 
 async function selectRows(page: Page, rows: number) {
   await page.locator('#row-count').selectOption(String(rows))
-  await expect(page.locator('[data-verdict="run-status"]')).toContainText(`Dataset reshuffled to ${rows} rows`)
+  await expect(page.locator('[data-verdict="run-status"]')).toContainText(`Synthetic dataset resized and resealed to ${rows} rows`)
 }
 
 test('OPE sorting recovers dense age but fails explicitly on sparse salary', async ({ page }) => {
@@ -139,7 +139,7 @@ test('overlapping row-count changes commit only the newest sealed table', async 
   })
 
   await expectVerdict(page, 'run-status', {
-    text: 'Dataset reshuffled to 24 rows. Previous recovery retired.',
+    text: 'Synthetic dataset resized and resealed to 24 rows. Previous recovery retired.',
     result: 'retired',
     className: 'status neutral',
   })

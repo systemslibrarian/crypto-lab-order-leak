@@ -158,12 +158,12 @@ async function driveEveryState(page: Page, visit: () => Promise<void>) {
 
   for (const rowCount of ROW_COUNTS) {
     await page.locator('#row-count').selectOption(rowCount)
-    await expect(page.locator('[data-verdict="run-status"]')).toContainText(`Dataset reshuffled to ${Number(rowCount)} rows`)
+    await expect(page.locator('[data-verdict="run-status"]')).toContainText(`Synthetic dataset resized and resealed to ${Number(rowCount)} rows`)
     await visit()
     await exercise(page, visit)
   }
   await page.locator('#row-count').selectOption('240')
-  await expect(page.locator('[data-verdict="run-status"]')).toContainText('Dataset reshuffled to 240 rows')
+  await expect(page.locator('[data-verdict="run-status"]')).toContainText('Synthetic dataset resized and resealed to 240 rows')
 
   for (const column of COLUMNS) {
     await page.locator(`[data-column="${column}"]`).click()
